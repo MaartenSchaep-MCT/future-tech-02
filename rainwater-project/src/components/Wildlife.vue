@@ -1,0 +1,437 @@
+<script setup lang="ts">
+import { shallowRef, watch } from 'vue'
+import { useLoop } from '@tresjs/core'
+import {
+  BoxGeometry, Color, CylinderGeometry, DoubleSide, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+  Object3D, PlaneGeometry, SphereGeometry,
+} from 'three'
+import type { InstancedMesh } from 'three'
+import { terrainHeight, smoothstep } from '../scene/terrain'
+import { ui, world } from '../scene/rainState'
+import { sky } from '../scene/daylight'
+import { waveFlow, waveHeight } from '../scene/waves'
+
+// A small living world: sheep that graze and wander, rabbits that hop (and run for their burrows when it
+// pours), a flock of birds circling overhead, butterflies in fair weather and smoke from the chimney.
+// Everything is a handful of low-poly meshes animated on the CPU, so it costs next to nothing.
+let seed = 4242
+const random = () => {
+  seed = (seed * 16807) % 2147483647
+  return (seed - 1) / 2147483646
+}
+const range = (min: number, max: number) => min + random() * (max - min)
+
+// ---- Shared geometry and materials ----
+const sphere = new SphereGeometry(1, 10, 8)
+const box = new BoxGeometry(1, 1, 1)
+const legGeometry = new CylinderGeometry(0.035, 0.028, 0.38, 6)
+const wool = new MeshStandardMaterial({ color: '#e9e5da', roughness: 1 })
+const sheepFace = new MeshStandardMaterial({ color: '#3b3232', roughness: 0.9 })
+const rabbitFur = new MeshStandardMaterial({ color: '#8a7358', roughness: 1 })
+const white = new MeshStandardMaterial({ color: '#f1efe9', roughness: 1 })
+const birdFeather = new MeshStandardMaterial({ color: '#2e3036', roughness: 0.8, side: DoubleSide })
+
+const part = (geometry: any, material: any, position: [number, number, number], scale: [number, number, number]) => {
+  const mesh = new Mesh(geometry, material)
+  mesh.position.set(...position)
+  mesh.scale.set(...scale)
+  return mesh
+}
+
+// ---- Animal models ----
+const makeSheep = () => {
+  const group = new Group()
+  const body = part(sphere, wool, [0, 0.56, 0], [0.4, 0.34, 0.56])
+  body.castShadow = true
+  group.add(body)
+  group.add(part(sphere, wool, [0, 0.7, -0.1], [0.34, 0.26, 0.4]))
+
+  const head = new Group()
+  head.position.set(0, 0.68, 0.5)
+  head.add(part(sphere, sheepFace, [0, 0, 0.1], [0.12, 0.13, 0.2]))
+  head.add(part(sphere, sheepFace, [0.12, 0.05, 0.0], [0.07, 0.03, 0.04]))
+  head.add(part(sphere, sheepFace, [-0.12, 0.05, 0.0], [0.07, 0.03, 0.04]))
+  group.add(head)
+
+  const legs: Group[] = []
+  for (const [x, z] of [[0.16, 0.3], [-0.16, 0.3], [0.16, -0.3], [-0.16, -0.3]]) {
+    const pivot = new Group()
+    pivot.position.set(x, 0.4, z)
+    pivot.add(part(legGeometry, sheepFace, [0, -0.19, 0], [1, 1, 1]))
+    group.add(pivot)
+    legs.push(pivot)
+  }
+  group.userData = { head, legs }
+  return group
+}
+
+const makeRabbit = () => {
+  const group = new Group()
+  group.add(part(sphere, rabbitFur, [0, 0.14, 0], [0.11, 0.1, 0.19]))
+  group.add(part(sphere, rabbitFur, [0, 0.21, 0.18], [0.075, 0.07, 0.09]))
+  const earLeft = part(sphere, rabbitFur, [0.03, 0.34, 0.17], [0.022, 0.1, 0.035])
+  const earRight = part(sphere, rabbitFur, [-0.03, 0.34, 0.17], [0.022, 0.1, 0.035])
+  group.add(earLeft, earRight)
+  group.add(part(sphere, white, [0, 0.15, -0.2], [0.045, 0.045, 0.045]))
+  group.userData = { ears: [earLeft, earRight] }
+  return group
+}
+
+const makeBird = () => {
+  const group = new Group()
+  group.add(part(sphere, birdFeather, [0, 0, 0], [0.07, 0.06, 0.2]))
+  group.add(part(sphere, birdFeather, [0, 0.01, 0.2], [0.04, 0.04, 0.05]))
+  const wings: Group[] = []
+  for (const side of [1, -1]) {
+    const pivot = new Group()
+    pivot.position.set(side * 0.05, 0.02, 0)
+    pivot.add(part(box, birdFeather, [side * 0.22, 0, 0], [0.44, 0.012, 0.14]))
+    group.add(pivot)
+    wings.push(pivot)
+  }
+  group.userData = { wings }
+  return group
+}
+
+// ---- World rules ----
+// Keep animals off the house, the barrel, the lamp post, the stone path and out of the far distance
+const blocked = (x: number, z: number) =>
+  (x > -6 && x < 8 && z > -8 && z < 8) || (Math.abs(x) < 1.8 && z > 4 && z < 21) || Math.hypot(x, z) > 32
+
+const pickTarget = (ax: number, az: number, radius: number) => {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const angle = random() * Math.PI * 2
+    const r = Math.sqrt(random()) * radius
+    const x = ax + Math.cos(angle) * r
+    const z = az + Math.sin(angle) * r
+    if (!blocked(x, z)) return { x, z }
+  }
+  return { x: ax, z: az }
+}
+
+interface Walker {
+  group: Group
+  kind: 'sheep' | 'rabbit'
+  x: number
+  z: number
+  heading: number
+  tx: number
+  tz: number
+  anchorX: number
+  anchorZ: number
+  radius: number
+  state: 'walk' | 'graze' | 'sit' | 'hop' | 'home'
+  timer: number
+  phase: number
+  hopTime: number
+  hidden: boolean // rabbit safe in its burrow
+  vx: number // velocity while carried by flood water
+  vz: number
+  spin: number
+  swept: boolean
+}
+
+const makeWalker = (kind: 'sheep' | 'rabbit', anchorX: number, anchorZ: number, radius: number): Walker => {
+  const start = pickTarget(anchorX, anchorZ, radius)
+  const target = pickTarget(anchorX, anchorZ, radius)
+  return {
+    group: kind === 'sheep' ? makeSheep() : makeRabbit(),
+    kind,
+    x: start.x,
+    z: start.z,
+    heading: random() * Math.PI * 2,
+    tx: target.x,
+    tz: target.z,
+    anchorX,
+    anchorZ,
+    radius,
+    state: kind === 'sheep' ? 'graze' : 'sit',
+    timer: range(1, 5),
+    phase: random() * 10,
+    hopTime: 0,
+    hidden: false,
+    vx: 0,
+    vz: 0,
+    spin: 0,
+    swept: false,
+  }
+}
+
+const walkers: Walker[] = [
+  ...Array.from({ length: 6 }, () => makeWalker('sheep', -15, 13, 9)),
+  ...Array.from({ length: 2 }, () => makeWalker('sheep', 17, -14, 7)),
+  ...Array.from({ length: 3 }, () => makeWalker('rabbit', 11, -9, 7)),
+  ...Array.from({ length: 3 }, () => makeWalker('rabbit', -12, -10, 7)),
+  ...Array.from({ length: 2 }, () => makeWalker('rabbit', 12, 14, 6)),
+]
+
+interface Bird {
+  group: Group
+  angle: number
+  speed: number
+  radius: number
+  altitude: number
+  phase: number
+}
+const birds: Bird[] = Array.from({ length: 10 }, (_, i) => ({
+  group: makeBird(),
+  angle: random() * Math.PI * 2,
+  speed: (i % 3 === 0 ? -1 : 1) * range(0.2, 0.38),
+  radius: range(9, 18),
+  altitude: range(10, 17),
+  phase: random() * 10,
+}))
+
+// ---- Instanced extras ----
+const BUTTERFLIES = 14
+const SMOKE = 18
+const butterflyGeometry = new PlaneGeometry(0.16, 0.1).rotateX(-Math.PI / 2)
+const butterflyMaterial = new MeshBasicMaterial({ color: '#ffffff', side: DoubleSide })
+const smokeMaterial = new MeshBasicMaterial({ color: '#9a9a9a', transparent: true, opacity: 0.3, depthWrite: false })
+const butterflyRef = shallowRef<InstancedMesh | null>(null)
+const smokeRef = shallowRef<InstancedMesh | null>(null)
+
+const butterflies = Array.from({ length: BUTTERFLIES }, () => {
+  const spot = pickTarget(0, 0, 16)
+  return { x: spot.x, z: spot.z, y: range(0.6, 1.5), phase: random() * 20 }
+})
+
+watch(butterflyRef, (mesh) => {
+  if (!mesh) return
+  const palette = ['#f2a33a', '#f6f1d8', '#6fa8e6', '#f2d544', '#e87bb0']
+  butterflies.forEach((_, i) => mesh.setColorAt(i, new Color(palette[i % palette.length])))
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+}, { immediate: true })
+
+// Chimney top in world space (see House.vue: chimney at [-1.2, 2.4, -2], 1.6 high, house group at y = 1)
+const CHIMNEY = { x: -1.2, y: 4.4, z: -2 }
+
+const dummy = new Object3D()
+const flow = { x: 0, z: 0 }
+
+// ---- Update ----
+const { onBeforeRender } = useLoop()
+onBeforeRender(({ delta, elapsed }) => {
+  const dt = Math.min(delta, 0.05)
+  const rainy = ui.intensity
+
+  for (const w of walkers) {
+    const ground = terrainHeight(w.x, w.z)
+    const g = w.group
+    // Water surface here: the flood level plus any tsunami front passing over this spot
+    const surface = world.waterLevel > 0.05 ? world.waterLevel + waveHeight(w.x, w.z) : -10
+    const submerged = surface > ground + 0.15
+
+    // A flooded burrow drives the rabbits out
+    if (w.hidden && submerged) w.hidden = false
+    g.visible = !w.hidden && !(world.waterLevel > 0.05 && surface > ground + 9)
+    if (!g.visible) continue
+
+    if (submerged) {
+      // Swept away: carried along by the water, tumbling, bobbing on the surface
+      waveFlow(w.x, w.z, flow)
+      const follow = Math.min(1, dt * 2.5)
+      w.vx += (flow.x - w.vx) * follow
+      w.vz += (flow.z - w.vz) * follow
+      w.x = Math.max(-110, Math.min(110, w.x + w.vx * dt))
+      w.z = Math.max(-110, Math.min(110, w.z + w.vz * dt))
+      const speed = Math.hypot(w.vx, w.vz)
+      if (speed > 0.5) w.heading += (Math.atan2(w.vx, w.vz) - w.heading) * Math.min(1, dt * 3)
+      w.spin += dt * (1 + speed * 0.6)
+      const tumble = Math.min(1, speed / 6)
+      g.position.set(w.x, surface + 0.05 + Math.sin(elapsed * 1.6 + w.phase) * 0.05, w.z)
+      g.rotation.set(Math.sin(w.spin + w.phase) * (0.15 + tumble * 1.1), w.heading, Math.cos(w.spin * 0.8 + w.phase) * (0.12 + tumble * 1.4))
+      w.swept = true
+      continue
+    }
+
+    if (w.swept) {
+      // The water has gone: get up and head back home
+      w.swept = false
+      w.vx = 0
+      w.vz = 0
+      const t = pickTarget(w.anchorX, w.anchorZ, w.radius)
+      w.tx = t.x
+      w.tz = t.z
+      w.state = w.kind === 'sheep' ? 'walk' : 'hop'
+      w.timer = 20
+    }
+
+    w.timer -= dt
+    const speedBase = w.kind === 'sheep' ? 0.7 : 2.6
+
+    // Decide what to do
+    if (w.kind === 'rabbit' && rainy > 0.45 && w.state !== 'home') {
+      w.state = 'home'
+      w.tx = w.anchorX
+      w.tz = w.anchorZ
+    } else if (w.kind === 'rabbit' && rainy < 0.3 && w.state === 'home') {
+      w.state = 'sit'
+      w.timer = range(1, 3)
+      w.hidden = false
+      g.visible = true
+    } else if (w.timer <= 0 && w.state !== 'home') {
+      if (w.kind === 'sheep') {
+        if (w.state === 'graze') {
+          const t = pickTarget(w.anchorX, w.anchorZ, w.radius)
+          w.tx = t.x
+          w.tz = t.z
+          w.state = 'walk'
+          w.timer = range(6, 14)
+        } else {
+          w.state = 'graze'
+          w.timer = range(5, 12)
+        }
+      } else if (w.state === 'sit') {
+        const t = pickTarget(w.anchorX, w.anchorZ, w.radius)
+        w.tx = t.x
+        w.tz = t.z
+        w.state = 'hop'
+        w.timer = range(2, 5)
+        w.hopTime = 0
+      } else {
+        w.state = 'sit'
+        w.timer = range(1.5, 5)
+      }
+    }
+
+    // Steering
+    const moving = w.state === 'walk' || w.state === 'hop' || w.state === 'home'
+    let hopHeight = 0
+    if (moving) {
+      const dx = w.tx - w.x
+      const dz = w.tz - w.z
+      const distance = Math.hypot(dx, dz)
+      if (distance < 0.5) {
+        if (w.state === 'home') {
+          w.hidden = true // safe in the burrow until the rain eases
+          g.visible = false
+          continue
+        }
+        w.state = w.kind === 'sheep' ? 'graze' : 'sit'
+        w.timer = range(3, 9)
+      } else {
+        // Turn towards the target, then move forward
+        const wanted = Math.atan2(dx, dz)
+        let turn = wanted - w.heading
+        turn = Math.atan2(Math.sin(turn), Math.cos(turn))
+        w.heading += Math.max(-3 * dt, Math.min(3 * dt, turn))
+        let speed = speedBase * (w.state === 'home' ? 1.6 : 1)
+        if (w.kind === 'rabbit') {
+          // Hops: move in bursts that follow the jump arc
+          w.hopTime += dt
+          const cycle = (w.hopTime * 2.2) % 1
+          hopHeight = Math.sin(cycle * Math.PI) * 0.22
+          speed *= Math.sin(cycle * Math.PI) * 1.4
+        }
+        const nx = w.x + Math.sin(w.heading) * speed * dt
+        const nz = w.z + Math.cos(w.heading) * speed * dt
+        // (an animal that was swept into a forbidden spot may always walk back out)
+        if (blocked(nx, nz) && !blocked(w.x, w.z)) {
+          const t = pickTarget(w.anchorX, w.anchorZ, w.radius)
+          w.tx = t.x
+          w.tz = t.z
+        } else {
+          w.x = nx
+          w.z = nz
+        }
+        w.phase += dt * (w.kind === 'sheep' ? 7 : 0)
+      }
+    }
+
+    // Pose
+    const y = terrainHeight(w.x, w.z)
+    g.position.set(w.x, y + hopHeight, w.z)
+    g.rotation.set(w.kind === 'rabbit' && moving ? -Math.cos(((w.hopTime * 2.2) % 1) * Math.PI) * 0.35 : 0, w.heading, 0)
+
+    if (w.kind === 'sheep') {
+      const { head, legs } = g.userData as { head: Group; legs: Group[] }
+      const walking = w.state === 'walk'
+      legs.forEach((leg, i) => {
+        const swing = walking ? Math.sin(w.phase + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.45 : 0
+        leg.rotation.x += (swing - leg.rotation.x) * Math.min(1, dt * 12)
+      })
+      // Head down while grazing, up while walking
+      const target = w.state === 'graze' ? 0.9 + Math.sin(elapsed * 3 + w.phase) * 0.06 : walking ? 0.05 : 0.2
+      head.rotation.x += (target - head.rotation.x) * Math.min(1, dt * 4)
+    } else {
+      const { ears } = g.userData as { ears: Mesh[] }
+      const twitch = w.state === 'sit' ? Math.sin(elapsed * 9 + w.phase) * 0.08 : 0
+      ears[0].rotation.z = 0.15 + twitch
+      ears[1].rotation.z = -0.15 - twitch
+    }
+  }
+
+  // Birds circle high above and leave when the weather turns
+  const birdPresence = ui.apocalypse ? 0 : (1 - smoothstep(0.2, 0.45, rainy)) * smoothstep(0.1, 0.3, sky.day)
+  const cx = Math.sin(elapsed * 0.04) * 8
+  const cz = Math.cos(elapsed * 0.03) * 8
+  for (const b of birds) {
+    b.angle += b.speed * dt
+    const flapping = Math.floor(elapsed * 0.4 + b.phase) % 3 !== 0
+    const group = b.group
+    group.visible = birdPresence > 0.01
+    if (!group.visible) continue
+    const x = cx + Math.cos(b.angle) * b.radius
+    const z = cz + Math.sin(b.angle) * b.radius
+    const flee = (1 - birdPresence) * 40
+    group.position.set(x, b.altitude + Math.sin(elapsed * 0.7 + b.phase) * 1.2 + flee, z)
+    const vx = -Math.sin(b.angle) * Math.sign(b.speed)
+    const vz = Math.cos(b.angle) * Math.sign(b.speed)
+    group.rotation.set(0, Math.atan2(vx, vz), -0.3 * Math.sign(b.speed))
+    const { wings } = group.userData as { wings: Group[] }
+    const flap = flapping ? Math.sin(elapsed * 13 + b.phase) * 0.7 : 0.15
+    wings[0].rotation.z = flap
+    wings[1].rotation.z = -flap
+  }
+
+  // Butterflies in fair weather
+  const butterflyMesh = butterflyRef.value
+  if (butterflyMesh) {
+    const presence = ui.apocalypse ? 0 : (1 - smoothstep(0.05, 0.2, rainy)) * smoothstep(0.3, 0.6, sky.day)
+    butterflyMesh.visible = presence > 0.01
+    if (butterflyMesh.visible) {
+      butterflies.forEach((bf, i) => {
+        const t = elapsed + bf.phase
+        dummy.position.set(
+          bf.x + Math.sin(t * 0.6) * 1.8 + Math.sin(t * 1.9) * 0.3,
+          terrainHeight(bf.x, bf.z) + bf.y + Math.sin(t * 1.7) * 0.25,
+          bf.z + Math.cos(t * 0.5) * 1.8,
+        )
+        dummy.rotation.set(0, t * 0.6 + Math.PI / 2, Math.sin(t * 1.7) * 0.2)
+        // Wing beat: the flat wings narrow and widen
+        dummy.scale.set(0.35 + 0.65 * Math.abs(Math.sin(t * 22)), 1, 1).multiplyScalar(presence)
+        dummy.updateMatrix()
+        butterflyMesh.setMatrixAt(i, dummy.matrix)
+      })
+      butterflyMesh.instanceMatrix.needsUpdate = true
+    }
+  }
+
+  // Chimney smoke drifting downwind
+  const smokeMesh = smokeRef.value
+  if (smokeMesh) {
+    const gust = 1.2 + rainy * 2.5
+    for (let i = 0; i < SMOKE; i++) {
+      const t = (elapsed * 0.18 + i / SMOKE) % 1
+      dummy.position.set(
+        CHIMNEY.x + t * gust * 2.2 + Math.sin(elapsed * 0.7 + i) * 0.1 * t,
+        CHIMNEY.y + t * 3.4,
+        CHIMNEY.z + Math.sin(i * 2.1 + elapsed * 0.3) * 0.15 * t,
+      )
+      dummy.rotation.set(0, 0, 0)
+      dummy.scale.setScalar((0.1 + t * 0.55) * (1 - t * t * t) * (1 - rainy * 0.5))
+      dummy.updateMatrix()
+      smokeMesh.setMatrixAt(i, dummy.matrix)
+    }
+    smokeMesh.instanceMatrix.needsUpdate = true
+  }
+})
+</script>
+
+<template>
+  <primitive v-for="(w, i) in walkers" :key="`walker-${i}`" :object="w.group" />
+  <primitive v-for="(b, i) in birds" :key="`bird-${i}`" :object="b.group" />
+  <TresInstancedMesh ref="butterflyRef" :args="[butterflyGeometry, butterflyMaterial, BUTTERFLIES]" :frustum-culled="false" />
+  <TresInstancedMesh ref="smokeRef" :args="[sphere, smokeMaterial, SMOKE]" :frustum-culled="false" />
+</template>

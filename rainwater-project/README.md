@@ -62,3 +62,13 @@ npm run lint:fix
 - [TresJS Documentation](https://tresjs.org)
 - [Three.js Documentation](https://threejs.org/docs/)
 - [Vue.js Documentation](https://vuejs.org/)
+## Live weather
+
+The "Live" mode fetches current rainfall from [OpenWeather](https://openweathermap.org/api).
+
+1. Create a free API key.
+2. Copy `.env.example` to `.env.local` and put the key in `OPENWEATHER_API_KEY` (`.env.local` is git-ignored).
+3. Restart `bun dev`.
+
+The key is added by the Vite dev/preview server (see `vite.config.ts`), so it is never bundled into the browser code.
+A static deployment would need an equivalent small proxy.
