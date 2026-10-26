@@ -12,10 +12,10 @@ import BarrelWater from './BarrelWater.vue'
 import RainCurtain from './RainCurtain.vue'
 import Puddles from './Puddles.vue'
 import WaterBlobs from './WaterBlobs.vue'
-import HydroLamp from './HydroLamp.vue'
 import Flood from './Flood.vue'
 import Wildlife from './Wildlife.vue'
 import DayNight from './DayNight.vue'
+import ExtraTanks from './ExtraTanks.vue'
 import SceneEnvironment from './SceneEnvironment.vue'
 import { skyColor, ui } from '../scene/rainState'
 
@@ -38,7 +38,7 @@ const houseRef = ref()
 
 <template>
   <TresPerspectiveCamera :position="[25, 15, 25]" :look-at="[0, 1, 0]" :far="1200" />
-  <CameraControls :max-polar-angle="Math.PI / 2 - 0.05" :max-distance="80" />
+  <CameraControls :max-polar-angle="Math.PI / 2 - 0.05" :max-distance="130" />
   <DayNight />
   <SkyDome />
   <SceneEnvironment />
@@ -46,9 +46,9 @@ const houseRef = ref()
   <Landscape />
   <Puddles />
   <BarrelWater />
+  <ExtraTanks />
   <RainSystem />
   <WaterBlobs />
-  <HydroLamp />
   <Wildlife />
   <Flood />
   <RainCurtain />

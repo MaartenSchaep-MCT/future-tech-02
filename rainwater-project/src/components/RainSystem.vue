@@ -4,11 +4,11 @@ import { useLoop } from '@tresjs/core'
 import { AdditiveBlending, Color, DoubleSide, MeshBasicMaterial, RingGeometry, SphereGeometry } from 'three'
 import type { InstancedMesh, Mesh } from 'three'
 import {
-  HOUSE_Y, eaveX, roofLength, roofSlope, roofSurfaceY, gutterX, gutterWorldY, downspoutZ,
+  HOUSE_Y, eaveX, roofSlope, houseGeometry, ROOF_FRONT_Z, MIN_ROOF_AREA, MAX_ROOF_AREA, roofSurfaceY, gutterX, gutterWorldY, downspoutZ,
   barrelRadius, BARREL_FLOOR_Y, BARREL_TOP_Y,
 } from '../scene/config'
 import { terrainHeight } from '../scene/terrain'
-import { sim, ui, world } from '../scene/rainState'
+import { sim, ui, world, RUNOFF_COEFFICIENT } from '../scene/rainState'
 import { sky } from '../scene/daylight'
 import { water, addRipple, requestBlobExplosion, hooks } from '../scene/water'
 import { pushSample } from '../scene/history'
@@ -26,14 +26,12 @@ const SPAWN_Y = 28
 const WIND = 2 // average wind speed; gusts vary it between ~0.1x and ~1.9x
 const GRAVITY = 9.8
 const AVG_FALL_SPEED = 23
-const GUTTER_TOP_Y = gutterWorldY(downspoutZ)
-const ROOF_CATCH = eaveX * roofLength // m2 of roof draining into the gutter (1 scene unit = 1 m)
+// (the roof catchment in m2 comes from ui.roofArea; 1 scene unit = 1 m)
 // Every simulated drop that lands on the catchment stands for this much water. It is recomputed each frame
 // so the real inflow equals rainfall (mm/h) x catchment area x the time-lapse factor, whatever the drop count.
 let litresPerDrop = 0.02
 const WATER_RADIUS = 0.5
 const WATER_MAX_HEIGHT = 1.15 // water height when the tank is full
-const ROOF_HALF = roofLength / 2
 const ROOF_COS = 1 / Math.sqrt(1 + roofSlope * roofSlope)
 const BARREL_X = gutterX
 const BARREL_Z = downspoutZ
@@ -193,6 +191,8 @@ hooks.onBlobImpact = (x, y, z, size, speed) => {
 let shownFraction = 0 // smoothed fill level, so draining collapses quickly instead of popping
 const waterTopY = () => BARREL_FLOOR_Y + 0.02 + shownFraction * WATER_MAX_HEIGHT
 
+let roofSmooth = ui.roofArea
+let roofTarget = ui.roofArea
 let collectedSinceSync = 0
 let usedSinceSync = 0
 let sampleTimer = 0
@@ -355,8 +355,24 @@ onBeforeRender(({ delta, elapsed }) => {
   // Rain drops
   const count = Math.floor(MAX_DROPS * ui.intensity)
   const mm = ui.intensity > 0.001 ? mmFromIntensity(ui.intensity) : 0
-  const hitsPerSecond = count * (AVG_FALL_SPEED / (SPAWN_Y + 2)) * (ROOF_CATCH / (AREA * AREA))
-  litresPerDrop = hitsPerSecond > 0 ? ((mm * ROOF_CATCH) / 3600 * ui.timeLapse) / hitsPerSecond : 0
+  const geometry = houseGeometry(ui.roofArea)
+  world.roofBackZ = geometry.roofBackZ
+  world.chimneyZ = geometry.chimneyZ
+  world.wallBackZ = geometry.wallBackZ
+  const rainCenterZ = (ROOF_FRONT_Z + geometry.roofBackZ) / 2 // keep the rain over the whole (possibly long) roof
+  const catchment = geometry.roofLen * eaveX // m2 that actually drains into the gutter
+  const hitsPerSecond = count * (AVG_FALL_SPEED / (SPAWN_Y + 2)) * (catchment / (AREA * AREA))
+  litresPerDrop = hitsPerSecond > 0 ? ((mm * catchment * RUNOFF_COEFFICIENT) / 3600 * ui.timeLapse) / hitsPerSecond : 0
+
+  // Automatic roof size: the area that collects the daily use from the average rainfall of the location
+  if (ui.roofAuto) {
+    const needed = ui.avgRainMmDay > 0 ? ui.dailyUseL / (ui.avgRainMmDay * RUNOFF_COEFFICIENT) : MAX_ROOF_AREA
+    roofTarget = Math.max(MIN_ROOF_AREA, Math.min(MAX_ROOF_AREA, needed))
+    roofSmooth += (roofTarget - roofSmooth) * (1 - Math.exp(-dt * 0.8))
+  } else {
+    roofSmooth = ui.roofArea
+    roofTarget = ui.roofArea
+  }
   drops.count = count
   ;(drops.material as any).opacity = 0.45 * (0.3 + 0.7 * sky.day) // rain is hard to see at night
   const dropArr = drops.instanceMatrix.array as Float32Array
@@ -373,7 +389,7 @@ onBeforeRender(({ delta, elapsed }) => {
         // Lands on the flood water: a ring on its surface
         if (x * x + z * z < 900 && Math.random() < 0.05) spawnRing(x, flood + 0.05, z, 0.1 + Math.random() * 0.15)
         hit = true
-      } else if (ax <= eaveX + 0.05 && Math.abs(z) <= ROOF_HALF && y < roofSurfaceY(ax)) {
+      } else if (ax <= eaveX + 0.05 && z <= ROOF_FRONT_Z && z >= world.roofBackZ && y < roofSurfaceY(ax)) {
         // Hit the roof: the water runs down towards the nearest eave
         const ry0 = roofSurfaceY(ax)
         if (!spawnRunoff(x > 0 ? 0 : 1, x, ry0, z, 0.3 + Math.random() * 1.8) && x > 0) collect(elapsed, BARREL_X, BARREL_Z)
@@ -396,7 +412,7 @@ onBeforeRender(({ delta, elapsed }) => {
 
     if (hit) {
       dx[i] = (Math.random() - 0.5) * AREA
-      dz[i] = (Math.random() - 0.5) * AREA
+      dz[i] = rainCenterZ + (Math.random() - 0.5) * AREA
       dy[i] = SPAWN_Y + Math.random() * 4
       newDropSize(i)
       writeSphere(dropArr, i, 0, -100, 0, 0)
@@ -528,7 +544,7 @@ onBeforeRender(({ delta, elapsed }) => {
 
     // Bounce off the underside of the roof
     const ax = Math.abs(x)
-    if (!dead && fvy[i] > 0 && ax <= eaveX && Math.abs(z) <= ROOF_HALF) {
+    if (!dead && fvy[i] > 0 && ax <= eaveX && z <= ROOF_FRONT_Z && z >= world.roofBackZ) {
       const roofY = roofSurfaceY(ax)
       if (y > roofY - 0.4 && y < roofY + 0.1) {
         fvy[i] *= -0.25
@@ -617,7 +633,7 @@ onBeforeRender(({ delta, elapsed }) => {
   if (sim.volume > ui.capacity || world.floodY > BARREL_TOP_Y) sim.volume = ui.capacity // the flood also fills the tank
 
   // Water drawn from the tank (time-lapse applies, so usage keeps pace with the faster filling)
-  const drawn = Math.min(sim.volume, (ui.usageLpm / 60) * ui.timeLapse * dt)
+  const drawn = Math.min(sim.volume, (ui.dailyUseL / 86400) * ui.timeLapse * dt)
   sim.volume -= drawn
   usedSinceSync += drawn
 
@@ -656,7 +672,7 @@ onBeforeRender(({ delta, elapsed }) => {
   sampleTimer += dt
   if (sampleTimer >= 1) {
     sampleTimer -= 1
-    pushSample(mm, sim.volume, ui.flowRate * 60, ui.usageRate * 60, ui.power)
+    pushSample(mm, sim.volume, ui.flowRate * 60, ui.usageRate * 60)
   }
 
   // Sync UI state ~10x per second
@@ -666,17 +682,11 @@ onBeforeRender(({ delta, elapsed }) => {
     ui.usageRate = ui.usageRate * 0.6 + (usedSinceSync / syncTimer) * 0.4
     ui.usedTotal += usedSinceSync
 
-    // Hydro turbine in the downspout: P = rho * g * Q * head * efficiency, with Q the real (not time-lapsed) flow.
-    // Energy is accumulated in simulated time, so the time-lapse speeds it up like everything else in the tank.
-    const head = Math.max(0.3, GUTTER_TOP_Y - waterTopY())
-    const realFlow = ui.flowRate / 1000 / ui.timeLapse // m3/s
-    ui.power = 1000 * GRAVITY * realFlow * head * ui.efficiency
-    ui.energyWh += (ui.power * ui.timeLapse * syncTimer) / 3600
-    ui.potentialWh = (sim.volume * GRAVITY * Math.max(0, (waterTopY() - BARREL_FLOOR_Y) / 2)) / 3600
     usedSinceSync = 0
     collectedSinceSync = 0
     syncTimer = 0
     ui.volume = sim.volume
+    if (ui.roofAuto) ui.roofArea = roofSmooth
     ui.wetness = wetness
     ui.overflowing = elapsed - lastOverflow < 1
     ui.emptying = elapsed < emptyingUntil

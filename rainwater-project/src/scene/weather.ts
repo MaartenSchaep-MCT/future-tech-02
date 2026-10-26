@@ -1,7 +1,9 @@
 import { ui } from './rainState'
+import { findPlace, loadClimate } from './climate'
 
-// Live rain from OpenWeather. Requests go to /api/geocode and /api/weather, which the Vite dev/preview server
-// forwards to OpenWeather with the API key from .env.local added (see vite.config.ts).
+// One location drives everything: setPlace() looks the place up and loads its rainfall climate (Open-Meteo, no key),
+// and "Live" mode reads the current rain there from OpenWeather. The live request goes to /api/weather, which the
+// Vite dev/preview server forwards to OpenWeather with the API key from .env.local added (see vite.config.ts).
 const REFRESH_MS = 10 * 60 * 1000
 
 // mm/h of rain -> 0..1 slider intensity: 0.5 mm/h drizzle ~ 0.06, 2.5 ~ 0.27, 8 ~ 0.63, 20 ~ 0.92
@@ -20,7 +22,6 @@ const mmFromCondition = (id: number) => {
 }
 
 let timer: ReturnType<typeof setInterval> | null = null
-let location: { lat: number; lon: number } | null = null
 
 const getJson = async (url: string) => {
   const response = await fetch(url)
@@ -33,10 +34,10 @@ const getJson = async (url: string) => {
 }
 
 const refresh = async () => {
-  if (!location) return
+  if (!ui.place.name) return
   ui.live.loading = true
   try {
-    const data = await getJson(`/api/weather?lat=${location.lat}&lon=${location.lon}&units=metric`)
+    const data = await getJson(`/api/weather?lat=${ui.place.lat}&lon=${ui.place.lon}&units=metric`)
     const condition = data.weather?.[0]
     const rain = data.rain?.['1h'] ?? (data.rain?.['3h'] ? data.rain['3h'] / 3 : undefined)
     const mm = rain ?? mmFromCondition(condition?.id ?? 800)
@@ -55,33 +56,48 @@ const refresh = async () => {
 export const stopLive = () => {
   if (timer) clearInterval(timer)
   timer = null
-  location = null
   ui.mode = 'manual'
   ui.live.error = ''
 }
 
-export const startLive = async (query: string) => {
-  const q = query.trim()
-  if (!q) {
-    ui.live.error = 'Type a city name, e.g. "Ghent" or "Seattle, US"'
+export const startLive = async () => {
+  if (!ui.place.name) {
+    ui.live.error = 'Search for a location first.'
     return
   }
-  ui.live.loading = true
-  ui.live.error = ''
+  ui.mode = 'live'
+  if (timer) clearInterval(timer)
+  timer = setInterval(refresh, REFRESH_MS)
+  await refresh()
+  if (ui.live.error) {
+    const message = ui.live.error
+    stopLive()
+    ui.live.error = message
+  }
+}
+
+// Look up a place by name and load its rainfall history
+export const setPlace = async (query: string) => {
+  const q = query.trim()
+  if (!q) {
+    ui.place.error = 'Type a city name, e.g. "Ghent" or "Seattle, US"'
+    return
+  }
+  ui.place.loading = true
+  ui.place.error = ''
   try {
-    const places = await getJson(`/api/geocode?q=${encodeURIComponent(q)}&limit=1`)
-    if (!Array.isArray(places) || places.length === 0) throw new Error(`No location found for "${q}"`)
-    const place = places[0]
-    location = { lat: place.lat, lon: place.lon }
-    ui.live.name = [place.name, place.state, place.country].filter(Boolean).join(', ')
-    ui.mode = 'live'
-    if (timer) clearInterval(timer)
-    timer = setInterval(refresh, REFRESH_MS)
-    await refresh()
+    const place = await findPlace(q)
+    ui.place.name = place.name
+    ui.place.lat = place.lat
+    ui.place.lon = place.lon
+    ui.place.loading = false
+    // New place: the live weather (if on) and the climate both follow it
+    const climate = loadClimate(place.lat, place.lon)
+    if (ui.mode === 'live') await startLive()
+    await climate
   } catch (e) {
-    ui.live.error = e instanceof Error ? e.message : 'Could not look up that location'
-    if (!location) ui.mode = 'manual'
+    ui.place.error = e instanceof Error ? e.message : 'Could not look up that location'
   } finally {
-    ui.live.loading = false
+    ui.place.loading = false
   }
 }

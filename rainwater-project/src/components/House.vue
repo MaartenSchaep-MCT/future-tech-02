@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed, shallowRef, watchEffect } from 'vue'
 import type { TresObject } from '@tresjs/core'
 import { Shape, DoubleSide } from 'three'
 import {
   houseWidth, houseHeight, houseLength, floorY,
   eaveX, eaveY, ridgeY, roofThickness, roofLength, roofSlope,
   gutterX, gutterY, gutterRadius, gutterSlope, downspoutZ,
-  barrelRadius, barrelHeight,
+  barrelRadius, barrelHeight, houseGeometry, WALL_FRONT_Z,
 } from '../scene/config'
 import { plasterTexture, roofTileTexture } from '../scene/textures'
 import { ui } from '../scene/rainState'
@@ -25,6 +25,15 @@ defineExpose({ mesh: meshRef })
 const roofPitch = Math.atan2(ridgeY - eaveY, eaveX)
 const roofPanelWidth = Math.hypot(eaveX, ridgeY - eaveY) + 0.1
 const roofMap = roofTileTexture(roofPanelWidth / 2, roofLength / 2.4)
+
+// The roof length follows the roof area chosen in the planner
+const geo = computed(() => houseGeometry(ui.roofArea))
+watchEffect(() => roofMap.repeat.set(roofPanelWidth / 2, geo.value.roofLen / 2.4))
+const windowZs = computed(() => {
+  const list: number[] = []
+  for (let z = 2.8; z > geo.value.wallBackZ + 1.2; z -= 2.8) list.push(z)
+  return list
+})
 const roofCenterX = eaveX / 2
 const roofCenterY = (eaveY + ridgeY) / 2
 
@@ -56,68 +65,68 @@ const roofRoughness = computed(() => 0.85 - ui.wetness * 0.45)
 <template>
 <TresGroup :position="props.position">
   <!-- Walls -->
-  <TresMesh ref="meshRef" cast-shadow receive-shadow>
-    <TresBoxGeometry :args="[houseWidth, houseHeight, houseLength]" />
+  <TresMesh ref="meshRef" :position="[0, 0, geo.wallCenterZ]" cast-shadow receive-shadow>
+    <TresBoxGeometry :args="[houseWidth, houseHeight, geo.wallLen]" />
     <TresMeshStandardMaterial color="#d9c7a3" :roughness="0.9" :map="plasterMap" :bump-map="plasterMap" :bump-scale="0.6" />
   </TresMesh>
 
   <!-- Attic / gable block under the roof -->
-  <TresMesh :position="[0, 0, -houseLength / 2 + 0.01]" cast-shadow receive-shadow>
-    <TresExtrudeGeometry :args="[atticShape, { depth: houseLength - 0.02, bevelEnabled: false }]" />
+  <TresMesh :position="[0, 0, geo.wallBackZ + 0.01]" cast-shadow receive-shadow>
+    <TresExtrudeGeometry :args="[atticShape, { depth: geo.wallLen - 0.02, bevelEnabled: false }]" />
     <TresMeshStandardMaterial color="#d9c7a3" :roughness="0.9" :map="plasterMap" :bump-map="plasterMap" :bump-scale="0.6" />
   </TresMesh>
 
   <!-- Foundation -->
-  <TresMesh :position="[0, floorY + 0.1, 0]">
-    <TresBoxGeometry :args="[houseWidth + 0.15, 0.2, houseLength + 0.15]" />
+  <TresMesh :position="[0, floorY + 0.1, geo.wallCenterZ]">
+    <TresBoxGeometry :args="[houseWidth + 0.15, 0.2, geo.wallLen + 0.15]" />
     <TresMeshStandardMaterial color="#7d7d80" :roughness="1" />
   </TresMesh>
 
   <!-- Roof panels -->
-  <TresMesh :position="[-roofCenterX, roofCenterY, 0]" :rotation="[0, 0, roofPitch]" cast-shadow>
-    <TresBoxGeometry :args="[roofPanelWidth, roofThickness, roofLength]" />
+  <TresMesh :position="[-roofCenterX, roofCenterY, geo.roofCenterZ]" :rotation="[0, 0, roofPitch]" cast-shadow>
+    <TresBoxGeometry :args="[roofPanelWidth, roofThickness, geo.roofLen]" />
     <TresMeshStandardMaterial :color="roofColor" :roughness="roofRoughness" :map="roofMap" :bump-map="roofMap" :bump-scale="1.5" />
   </TresMesh>
-  <TresMesh :position="[roofCenterX, roofCenterY, 0]" :rotation="[0, 0, -roofPitch]" cast-shadow>
-    <TresBoxGeometry :args="[roofPanelWidth, roofThickness, roofLength]" />
+  <TresMesh :position="[roofCenterX, roofCenterY, geo.roofCenterZ]" :rotation="[0, 0, -roofPitch]" cast-shadow>
+    <TresBoxGeometry :args="[roofPanelWidth, roofThickness, geo.roofLen]" />
     <TresMeshStandardMaterial :color="roofColor" :roughness="roofRoughness" :map="roofMap" :bump-map="roofMap" :bump-scale="1.5" />
   </TresMesh>
 
   <!-- Roof ridge cap -->
-  <TresMesh :position="[0, ridgeY + 0.05, 0]" :rotation="[0, 0, Math.PI / 4]">
-    <TresBoxGeometry :args="[0.35, 0.35, roofLength + 0.1]" />
+  <TresMesh :position="[0, ridgeY + 0.05, geo.roofCenterZ]" :rotation="[0, 0, Math.PI / 4]">
+    <TresBoxGeometry :args="[0.35, 0.35, geo.roofLen + 0.1]" />
     <TresMeshStandardMaterial color="#5e2418" :roughness="0.7" />
   </TresMesh>
 
   <!-- Fascia boards along the eaves -->
-  <TresMesh v-for="side in [-1, 1]" :key="side" :position="[side * (eaveX + 0.02), eaveY - 0.05, 0]">
-    <TresBoxGeometry :args="[0.06, 0.2, roofLength]" />
+  <TresMesh v-for="side in [-1, 1]" :key="side" :position="[side * (eaveX + 0.02), eaveY - 0.05, geo.roofCenterZ]">
+    <TresBoxGeometry :args="[0.06, 0.2, geo.roofLen]" />
     <TresMeshStandardMaterial color="#f2efe8" />
   </TresMesh>
 
   <!-- Chimney -->
-  <TresMesh :position="[-1.2, 2.4, -2]" cast-shadow>
+  <TresMesh :position="[-1.2, 2.4, geo.chimneyZ]" cast-shadow>
     <TresBoxGeometry :args="[0.7, 1.6, 0.7]" />
     <TresMeshStandardMaterial color="#8c5a48" :roughness="1" />
   </TresMesh>
-  <TresMesh :position="[-1.2, 3.25, -2]">
+  <TresMesh :position="[-1.2, 3.25, geo.chimneyZ]">
     <TresBoxGeometry :args="[0.9, 0.12, 0.9]" />
     <TresMeshStandardMaterial color="#6b6b6e" />
   </TresMesh>
 
   <!-- Door (front) -->
-  <TresMesh :position="[0, floorY + 0.8, houseLength / 2 + 0.03]">
+  <TresMesh :position="[0, floorY + 0.8, WALL_FRONT_Z + 0.03]">
     <TresBoxGeometry :args="[0.9, 1.6, 0.08]" />
     <TresMeshStandardMaterial color="#4a2f1b" :roughness="0.8" />
   </TresMesh>
-  <TresMesh :position="[0.3, floorY + 0.8, houseLength / 2 + 0.09]">
+  <TresMesh :position="[0.3, floorY + 0.8, WALL_FRONT_Z + 0.09]">
     <TresSphereGeometry :args="[0.05, 12, 12]" />
     <TresMeshStandardMaterial color="#d4af37" :metalness="0.8" :roughness="0.3" />
   </TresMesh>
 
   <!-- Windows (both long sides) -->
   <template v-for="side in [-1, 1]" :key="side">
-    <template v-for="z in [-2.8, 0, 2.8]" :key="z">
+    <template v-for="z in windowZs" :key="z">
       <TresMesh :position="[side * (houseWidth / 2 + 0.02), 0, z]">
         <TresBoxGeometry :args="[0.06, 0.9, 0.9]" />
         <TresMeshStandardMaterial color="#f2efe8" />
@@ -131,8 +140,8 @@ const roofRoughness = computed(() => 0.85 - ui.wetness * 0.45)
 
   <!-- Gutter: half pipe along the +x eave, tilted so water runs towards the downspout (+z) -->
   <TresGroup :position="[gutterX, gutterY, 0]" :rotation="[gutterSlope, 0, 0]">
-    <TresMesh :rotation="[Math.PI / 2, 0, 0]">
-      <TresCylinderGeometry :args="[gutterRadius, gutterRadius, roofLength, 16, 1, true, -Math.PI / 2, Math.PI]" />
+    <TresMesh :position="[0, 0, geo.roofCenterZ]" :rotation="[Math.PI / 2, 0, 0]">
+      <TresCylinderGeometry :args="[gutterRadius, gutterRadius, geo.roofLen, 16, 1, true, -Math.PI / 2, Math.PI]" />
       <TresMeshStandardMaterial color="#9aa3ab" :metalness="0.7" :roughness="0.4" :side="DoubleSide" />
     </TresMesh>
   </TresGroup>

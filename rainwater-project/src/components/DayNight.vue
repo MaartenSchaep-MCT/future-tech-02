@@ -12,7 +12,7 @@ const { scene } = useTresContext()
 const sunRef = shallowRef<DirectionalLight | null>(null)
 const hemiRef = shallowRef<HemisphereLight | null>(null)
 
-const fog = new Fog('#cfe3f0', 40, 110)
+const fog = new Fog('#cfe3f0', 90, 230)
 onMounted(() => {
   scene.value.fog = fog
 })
@@ -53,8 +53,8 @@ onBeforeRender(({ delta }) => {
   if (scene.value) scene.value.environmentIntensity = sky.envIntensity
 
   fog.color.copy(sky.horizon)
-  fog.near = 40 - ui.intensity * 20
-  fog.far = 110 - ui.intensity * 45
+  fog.near = 90 - ui.intensity * 45
+  fog.far = 230 - ui.intensity * 95
 })
 </script>
 
@@ -68,10 +68,10 @@ onBeforeRender(({ delta }) => {
     cast-shadow
     :shadow-mapSize-width="2048"
     :shadow-mapSize-height="2048"
-    :shadow-camera-left="-32"
-    :shadow-camera-right="32"
-    :shadow-camera-top="32"
-    :shadow-camera-bottom="-32"
+    :shadow-camera-left="-38"
+    :shadow-camera-right="38"
+    :shadow-camera-top="38"
+    :shadow-camera-bottom="-38"
     :shadow-camera-far="120"
     :shadow-bias="-0.0002"
     :shadow-normal-bias="0.04"

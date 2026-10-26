@@ -18,10 +18,10 @@ const FALL_SPEED = 0.8
 const FIRST_WAVE = 6 // seconds after the start
 const WAVE_INTERVAL = 22
 const WAVE_SPEED = 16
-const WAVE_START = -110 // distance behind the map centre where a wave starts
-const WAVE_END = 110
+const WAVE_START = -200 // distance behind the map centre where a wave starts
+const WAVE_END = 200
 
-const geometry = new PlaneGeometry(220, 220, 180, 180).rotateX(-Math.PI / 2)
+const geometry = new PlaneGeometry(420, 420, 210, 210).rotateX(-Math.PI / 2)
 
 // Up to three tsunami fronts at once: (direction x, direction z, position along the direction, amplitude)
 const waves = [uniform(new Vector4()), uniform(new Vector4()), uniform(new Vector4())]

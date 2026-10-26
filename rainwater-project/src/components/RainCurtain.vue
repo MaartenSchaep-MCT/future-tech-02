@@ -22,8 +22,8 @@ for (let k = 0; k < 2; k++) {
   streaks = streaks.add(smoothstep(float(0.62).sub(uIntensity.mul(0.1)), 0.85, n).mul(0.5))
 }
 // Sheets thin out towards the top, haze hugs the ground
-const sheets = streaks.mul(oneMinus(smoothstep(0.55, 1.0, coord.y))).mul(uIntensity).mul(0.45)
-const haze = oneMinus(smoothstep(0.0, 0.18, coord.y)).mul(uIntensity).mul(0.4)
+const sheets = streaks.mul(oneMinus(smoothstep(0.55, 1.0, coord.y))).mul(uIntensity).mul(0.3)
+const haze = oneMinus(smoothstep(0.0, 0.12, coord.y)).mul(uIntensity).mul(0.15)
 
 const material = new MeshBasicNodeMaterial()
 material.side = BackSide // the camera stays inside the cylinder
@@ -42,6 +42,6 @@ onBeforeRender(() => {
 
 <template>
   <TresMesh :material="material" :position="[0, 30, 0]" :frustum-culled="false" :render-order="5">
-    <TresCylinderGeometry :args="[85, 85, 60, 64, 1, true]" />
+    <TresCylinderGeometry :args="[150, 150, 60, 64, 1, true]" />
   </TresMesh>
 </template>

@@ -5,17 +5,17 @@ import { SphereGeometry } from 'three'
 import type { InstancedMesh } from 'three'
 import { createClearWaterMaterial } from '../scene/waterMaterial'
 import {
-  roofSurfaceY, eaveX, roofLength, gutterX, downspoutZ, BARREL_TOP_Y, BARREL_FLOOR_Y, barrelRadius,
+  roofSurfaceY, eaveX, ROOF_FRONT_Z, gutterX, downspoutZ, BARREL_TOP_Y, BARREL_FLOOR_Y, barrelRadius,
 } from '../scene/config'
 import { terrainHeight } from '../scene/terrain'
 import { blobRequests, hooks } from '../scene/water'
+import { world } from '../scene/rainState'
 
 // The bulk of the water thrown out when the barrel is emptied: a limited number of lumps of water with real
 // ballistic physics (gravity, drag, bounce off the roof, flattening and spreading on the ground). Each lump is
 // one instanced ellipsoid, stretched along its velocity while it flies, so the whole effect is a single draw call.
 const MAX_BLOBS = 90
 const GRAVITY = 9.8
-const ROOF_HALF = roofLength / 2
 
 const geometry = new SphereGeometry(1, 12, 8)
 // Thick water is less see-through than a droplet, hence the higher minimum opacity
@@ -155,7 +155,7 @@ onBeforeRender(({ delta }) => {
 
     // Bounces off the underside of the roof
     const ax = Math.abs(px[i])
-    if (!grounded[i] && vy[i] > 0 && ax <= eaveX && Math.abs(pz[i]) <= ROOF_HALF) {
+    if (!grounded[i] && vy[i] > 0 && ax <= eaveX && pz[i] <= ROOF_FRONT_Z && pz[i] >= world.roofBackZ) {
       const roofY = roofSurfaceY(ax)
       if (py[i] > roofY - 0.5 && py[i] < roofY + 0.1) {
         vy[i] *= -0.2

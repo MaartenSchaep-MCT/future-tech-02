@@ -96,7 +96,7 @@ const makeBird = () => {
 // ---- World rules ----
 // Keep animals off the house, the barrel, the lamp post, the stone path and out of the far distance
 const blocked = (x: number, z: number) =>
-  (x > -6 && x < 8 && z > -8 && z < 8) || (Math.abs(x) < 1.8 && z > 4 && z < 21) || Math.hypot(x, z) > 32
+  (x > -6 && x < 8 && z > world.wallBackZ - 3 && z < 8) || (Math.abs(x) < 1.8 && z > 4 && z < 21) || Math.hypot(x, z) > 32
 
 const pickTarget = (ax: number, az: number, radius: number) => {
   for (let attempt = 0; attempt < 12; attempt++) {
@@ -129,6 +129,15 @@ interface Walker {
   vz: number
   spin: number
   swept: boolean
+  flying: boolean // launched into the air by a tsunami front
+  y: number
+  fvx: number
+  fvy: number
+  fvz: number
+  wx: number // angular velocity while tumbling through the air
+  wy: number
+  wz: number
+  cooldown: number
 }
 
 const makeWalker = (kind: 'sheep' | 'rabbit', anchorX: number, anchorZ: number, radius: number): Walker => {
@@ -154,6 +163,15 @@ const makeWalker = (kind: 'sheep' | 'rabbit', anchorX: number, anchorZ: number, 
     vz: 0,
     spin: 0,
     swept: false,
+    flying: false,
+    y: 0,
+    fvx: 0,
+    fvy: 0,
+    fvz: 0,
+    wx: 0,
+    wy: 0,
+    wz: 0,
+    cooldown: 0,
   }
 }
 
@@ -204,7 +222,7 @@ watch(butterflyRef, (mesh) => {
 }, { immediate: true })
 
 // Chimney top in world space (see House.vue: chimney at [-1.2, 2.4, -2], 1.6 high, house group at y = 1)
-const CHIMNEY = { x: -1.2, y: 4.4, z: -2 }
+const CHIMNEY = { x: -1.2, y: 4.4 }
 
 const dummy = new Object3D()
 const flow = { x: 0, z: 0 }
@@ -224,8 +242,77 @@ onBeforeRender(({ delta, elapsed }) => {
 
     // A flooded burrow drives the rabbits out
     if (w.hidden && submerged) w.hidden = false
-    g.visible = !w.hidden && !(world.waterLevel > 0.05 && surface > ground + 9)
+    g.visible = w.flying || (!w.hidden && !(world.waterLevel > 0.05 && surface > ground + 9))
     if (!g.visible) continue
+
+    // Hit by the crest of a tsunami front: launched high into the air, tumbling and kicking
+    w.cooldown -= dt
+    if (!w.flying && w.cooldown <= 0 && world.waterLevel > 0.05 && waveHeight(w.x, w.z) > 0.9) {
+      waveFlow(w.x, w.z, flow)
+      const push = Math.hypot(flow.x, flow.z) || 1
+      const power = 9 + random() * 8
+      w.flying = true
+      w.y = Math.max(ground, surface) + 0.4
+      w.fvx = (flow.x / push) * power + (random() - 0.5) * 4
+      w.fvz = (flow.z / push) * power + (random() - 0.5) * 4
+      w.fvy = 12 + random() * 9
+      w.wx = (random() < 0.5 ? -1 : 1) * (6 + random() * 8)
+      w.wy = (random() < 0.5 ? -1 : 1) * (4 + random() * 8)
+      w.wz = (random() < 0.5 ? -1 : 1) * (5 + random() * 9)
+      w.hidden = false
+      w.swept = true
+    }
+
+    if (w.flying) {
+      // Ballistic flight with a bit less gravity than usual, so there is plenty of hang time
+      w.fvy -= 7 * dt
+      w.x = Math.max(-140, Math.min(140, w.x + w.fvx * dt))
+      w.z = Math.max(-140, Math.min(140, w.z + w.fvz * dt))
+      w.y += w.fvy * dt
+      g.position.set(w.x, w.y, w.z)
+      g.rotation.x += w.wx * dt
+      g.rotation.y += w.wy * dt
+      g.rotation.z += w.wz * dt
+      if (w.kind === 'sheep') {
+        // Legs flailing, head thrown about
+        const { head, legs } = g.userData as { head: Group; legs: Group[] }
+        legs.forEach((leg, i) => (leg.rotation.x = Math.sin(elapsed * 26 + i * 1.7) * 1.1))
+        head.rotation.x = Math.sin(elapsed * 18) * 0.8
+      } else {
+        const { ears } = g.userData as { ears: Mesh[] }
+        ears[0].rotation.z = 0.6 + Math.sin(elapsed * 30) * 0.5
+        ears[1].rotation.z = -0.6 - Math.sin(elapsed * 30) * 0.5
+      }
+
+      const waterTop = world.waterLevel > 0.05 ? world.waterLevel + waveHeight(w.x, w.z) : -10
+      const landing = Math.max(terrainHeight(w.x, w.z), waterTop)
+      if (w.fvy < 0 && w.y < landing) {
+        w.heading = Math.atan2(w.fvx, w.fvz)
+        if (waterTop > terrainHeight(w.x, w.z) + 0.15) {
+          // Splashes down in the flood and gets carried on again
+          w.flying = false
+          w.vx = w.fvx * 0.4
+          w.vz = w.fvz * 0.4
+          w.cooldown = 4
+          g.rotation.set(0, w.heading, 0)
+        } else {
+          // Bounces on the ground a few times, tumbling less each time
+          w.y = landing
+          w.fvy = -w.fvy * 0.45
+          w.fvx *= 0.6
+          w.fvz *= 0.6
+          w.wx *= 0.6
+          w.wy *= 0.6
+          w.wz *= 0.6
+          if (w.fvy < 2.5) {
+            w.flying = false
+            w.cooldown = 4
+            g.rotation.set(0, w.heading, 0)
+          }
+        }
+      }
+      continue
+    }
 
     if (submerged) {
       // Swept away: carried along by the water, tumbling, bobbing on the surface
@@ -417,7 +504,7 @@ onBeforeRender(({ delta, elapsed }) => {
       dummy.position.set(
         CHIMNEY.x + t * gust * 2.2 + Math.sin(elapsed * 0.7 + i) * 0.1 * t,
         CHIMNEY.y + t * 3.4,
-        CHIMNEY.z + Math.sin(i * 2.1 + elapsed * 0.3) * 0.15 * t,
+        world.chimneyZ + Math.sin(i * 2.1 + elapsed * 0.3) * 0.15 * t,
       )
       dummy.rotation.set(0, 0, 0)
       dummy.scale.setScalar((0.1 + t * 0.55) * (1 - t * t * t) * (1 - rainy * 0.5))

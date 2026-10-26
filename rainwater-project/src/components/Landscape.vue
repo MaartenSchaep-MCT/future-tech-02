@@ -6,8 +6,8 @@ import { ui } from '../scene/rainState'
 import GrassField from './GrassField.vue'
 import { smoothstep, terrainHeight, FLAT_RADIUS } from '../scene/terrain'
 
-const SIZE = 160
-const grassMap = grassTexture(60)
+const SIZE = 400
+const grassMap = grassTexture(150)
 
 // Wet ground is darker and glossier
 const groundColor = computed(() => `hsl(0, 0%, ${100 - ui.wetness * 38}%)`)
@@ -20,7 +20,7 @@ const random = () => {
   return (seed - 1) / 2147483646
 }
 
-const groundGeometry = new PlaneGeometry(SIZE, SIZE, 160, 160)
+const groundGeometry = new PlaneGeometry(SIZE, SIZE, 200, 200)
 groundGeometry.rotateX(-Math.PI / 2)
 {
   const pos = groundGeometry.attributes.position
@@ -52,6 +52,8 @@ const scatter = (count: number, minR: number, maxR: number, minScale: number, ma
     const r = minR + random() * (maxR - minR)
     const x = Math.cos(angle) * r
     const z = Math.sin(angle) * r
+    // keep clear of the house, including the longest roof the planner allows
+    if (x > -7 && x < 9 && z > -36 && z < 9) continue
     spots.push({
       x, z,
       y: terrainHeight(x, z),

@@ -22,7 +22,7 @@ const random = () => {
 
 // Keep the grass off the house footprint, the barrel and the stone path
 const blocked = (x: number, z: number) =>
-  (x > -4.2 && x < 5.2 && z > -6.7 && z < 6.7) || (Math.abs(x) < 1.2 && z > 5)
+  (x > -4.2 && x < 5.2 && z > -35 && z < 6.7) || (Math.abs(x) < 1.2 && z > 5)
 
 // One blade: 3 stacked quads plus a tip, rendered from both sides so the normal can stay pointing up
 const buildBlade = () => {

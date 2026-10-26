@@ -1,5 +1,5 @@
-export const FLAT_RADIUS = 14 // flat area around the house
-export const FADE_RADIUS = 40
+export const FLAT_RADIUS = 36 // flat area around the house (large enough for the longest roof)
+export const FADE_RADIUS = 72
 
 export const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))

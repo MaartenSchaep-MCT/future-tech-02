@@ -8,7 +8,6 @@ import { history, historyVersion } from '../scene/history'
 const BLUE = '#3987e5'
 const ORANGE = '#d95926'
 const INK = '#f0efec'
-const GREEN = '#199e70'
 const MUTED = '#c3c2b7'
 const GRID = 'rgba(255, 255, 255, 0.1)'
 
@@ -42,13 +41,6 @@ const charts: ChartDef[] = [
     series: [{ label: 'Tank volume', color: BLUE, data: () => history.volume }],
     yMax: () => ui.capacity,
     decimals: 1,
-  },
-  {
-    title: 'Hydro power',
-    unit: 'W',
-    series: [{ label: 'Power', color: GREEN, data: () => history.power }],
-    yMax: () => Math.max(1, Math.ceil(Math.max(0, ...history.power.slice(-windowSeconds.value)) * 2) / 2),
-    decimals: 2,
   },
   {
     title: 'Inflow vs. usage',
