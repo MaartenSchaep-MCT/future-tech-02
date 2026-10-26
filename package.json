@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@tresjs/cientos": "^5.10.0",
+    "@tresjs/post-processing": "^3.11.0"
+  }
+}

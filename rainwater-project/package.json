@@ -1,0 +1,32 @@
+{
+  "name": "rainwater-project",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TresJS Vue application",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint ",
+    "lint:fix": "eslint  --fix"
+  },
+  "dependencies": {
+    "@tresjs/cientos": "latest",
+    "@tresjs/core": "latest",
+    "@tresjs/leches": "^1.3.2",
+    "three": "latest",
+    "three-stdlib": "latest",
+    "vue": "latest"
+  },
+  "devDependencies": {
+    "@tresjs/eslint-config": "^1.1.0",
+    "@types/three": "latest",
+    "@vitejs/plugin-vue": "latest",
+    "eslint": "^9.16.0",
+    "typescript": "latest",
+    "vite": "latest",
+    "vite-plugin-glsl": "latest",
+    "vue-tsc": "latest"
+  }
+}
