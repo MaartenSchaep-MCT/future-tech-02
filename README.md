@@ -1,103 +1,103 @@
-# Regenwaterplanner
+# Rainwater Planner
 
-Een 3D-scène (TresJS + three.js, WebGPU) van een huis met regenput, om te zien en te berekenen **hoe groot je dak en je regentanks moeten zijn** voor een bepaald waterverbruik. Regen valt, loopt over het dak door de goot naar de tank, en een planner rekent met echte neerslagcijfers van jouw plaats. Je bedient alles met sliders, met je stem ("Hey water, vergroot het dak naar 135 vierkante meter") of met getypte opdrachten.
+A 3D scene (TresJS + three.js, WebGPU) of a house with a rain barrel, for seeing and calculating **how big your roof and rain tanks need to be** for a given water use. Rain falls, runs over the roof through the gutter into the tank, and a planner calculates with real rainfall data for your location. You control everything with sliders, with your voice ("Hey water, increase the roof size to 135 square meters") or with typed commands.
 
-## Starten
+## Getting started
 
-### Wat je nodig hebt
-- **Node.js 20.19+ of 22.12+** (nodig voor Vite 8; getest met Node 24).
-- **[Bun](https://bun.sh)** (aanbevolen: de `bun.lock` legt de versies vast, want in `package.json` staat overal `latest`) of npm.
-- **Chrome of Edge**, recent. Die hebben WebGPU en spraakherkenning.
-- Internet (voor de regencijfers en spraakherkenning).
+### What you need
+- **Node.js** (tested with v24.13.0).
+- **[Bun](https://bun.sh)** (tested with 1.3.9; recommended, because `bun.lock` pins the package versions and `package.json` uses `latest` everywhere) or npm.
+- **A recent Chrome or Edge**, which have WebGPU and speech recognition.
+- An internet connection (for the rainfall data and speech recognition).
 
-### Stappen
-Alle commando's draai je **in de map `rainwater-project`** (niet in de hoofdmap van de repository).
+### Steps
+Run all commands **inside the `rainwater-project` folder** (not the repository root).
 
 ```bash
 cd rainwater-project
-bun install          # eenmalig; installeert de pakketten uit bun.lock
-bun dev              # start de ontwikkelserver
+bun install          # once; installs the packages from bun.lock
+bun dev              # starts the development server
 ```
 
-Met npm: `npm install` en daarna `npm run dev`. Gebruik je npm zonder lockfile, dan kunnen nieuwere pakketversies dingen breken.
+With npm: `npm install`, then `npm run dev`. Without a lockfile npm may install newer package versions, which can break things.
 
-Open daarna **http://localhost:5173** (de terminal toont het adres; is de poort bezet, dan kiest Vite de volgende, zoals 5174). Stoppen doe je met `Ctrl+C`.
+Then open **http://localhost:5173** (the terminal prints the address; if the port is taken Vite picks the next one, such as 5174). Stop the server with `Ctrl+C`.
 
-### Een productieversie bouwen (optioneel)
+### Building a production version (optional)
 ```bash
-bunx vite build      # maakt de map dist/
-bunx vite preview    # bekijkt die versie op http://localhost:4173
+bunx vite build      # creates the dist/ folder
+bunx vite preview    # serves it at http://localhost:4173
 ```
-(`npm run build` voert eerst ook een typecontrole uit met `vue-tsc`; die draait niet op elke machine.)
+(`npm run build` also runs a type check with `vue-tsc` first, which did not run on the machine this was tested on.)
 
-### Live weer instellen (optioneel)
-Alleen nodig voor de knop **Live**. Al het andere, ook de planner met echte regencijfers, werkt zonder sleutel.
+### Setting up live weather (optional)
+Only needed for the **Live** button. Everything else, including the planner with real rainfall data, works without a key.
 
-1. Maak een gratis sleutel bij [OpenWeather](https://openweathermap.org/api) (een nieuwe sleutel kan een paar uur duren voor hij werkt).
-2. Kopieer `rainwater-project/.env.example` naar `rainwater-project/.env.local` en vul in: `OPENWEATHER_API_KEY=jouwsleutel`.
-3. **Herstart `bun dev`** (de sleutel wordt alleen bij het opstarten gelezen).
+1. Create a free key at [OpenWeather](https://openweathermap.org/api) (a new key can take a few hours to become active).
+2. Copy `rainwater-project/.env.example` to `rainwater-project/.env.local` and fill in: `OPENWEATHER_API_KEY=yourkey`.
+3. **Restart `bun dev`** (the key is only read when the server starts).
 
-`rainwater-project/.env.local` staat in `.gitignore`. De dev-server voegt de sleutel server-side toe (`rainwater-project/vite.config.ts`), dus hij komt niet in de browsercode. Live weer werkt daarom alleen via `bun dev` of `vite preview`, niet op statische hosting.
+`rainwater-project/.env.local` is listed in `.gitignore`. The dev server adds the key on the server side (`rainwater-project/vite.config.ts`), so it never ends up in the browser code. This means live weather only works through `bun dev` or `vite preview`, not on static hosting.
 
-### Gebruiken
-1. Typ je stad bovenin het paneel en druk op **Go**: de planner gebruikt dan de echte regen van jouw plaats.
-2. Tabblad **Plan**: vul je dagverbruik in en kijk welk dak en welke tanks nodig zijn.
-3. Spraak: klik op de microfoon (of zet **Hey water** aan) en zeg bijvoorbeeld "vergroot het dak naar 135 vierkante meter". Je kunt dezelfde opdrachten ook typen.
+### Using it
+1. Type your city at the top of the panel and press **Go**: the planner then uses the real rainfall of your location.
+2. **Plan** tab: enter your daily water use and see which roof and tanks you need.
+3. Voice: click the microphone (or switch on **Hey water**) and say, for example, "increase the roof size to 135 square meters". You can also type the same commands.
 
-### Problemen oplossen
-| Probleem | Oplossing |
+### Troubleshooting
+| Problem | Solution |
 |---|---|
-| Zwart scherm of foutmelding over WebGPU | Update Chrome/Edge en je grafische driver; controleer `chrome://gpu`. Zonder WebGPU valt de app terug op WebGL2, maar dat kan trager zijn. |
-| `bun: command not found` | Installeer Bun, of gebruik `npm install` en `npm run dev`. |
-| "Weather API key missing or invalid" | Sleutel ontbreekt, is nog niet actief, of de server is niet herstart na het invullen. |
-| Microfoon werkt niet | Sta de microfoon toe in de browser (slotje in de adresbalk) en gebruik Chrome of Edge. Typen en de knoppen werken altijd. |
-| De scène hapert | Zet de regen lager, gebruik een kleinere dakgrootte, of verlaag `COUNT` in `rainwater-project/src/components/GrassField.vue`. |
+| Black screen or a WebGPU error | Update Chrome/Edge and your graphics driver; check `chrome://gpu`. Without WebGPU the app falls back to WebGL2, which may be slower. |
+| `bun: command not found` | Install Bun, or use `npm install` and `npm run dev`. |
+| "Weather API key missing or invalid" | The key is missing, not active yet, or the server was not restarted after filling it in. |
+| Microphone does not work | Allow the microphone in the browser (the lock icon in the address bar) and use Chrome or Edge. Typing and the buttons always work. |
+| The scene stutters | Lower the rain, use a smaller roof size, or lower `COUNT` in `rainwater-project/src/components/GrassField.vue`. |
 
-## Bronnen van data
+## Data sources
 
-| Data | Bron | Gebruik |
+| Data | Source | Used for |
 |---|---|---|
-| Plaats zoeken | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | naam → coördinaten |
-| Dagelijkse neerslag, laatste 10 jaar | [Open-Meteo Historical Weather](https://open-meteo.com/en/docs/historical-weather-api) | klimaat en simulatie in de planner |
-| Huidige regen (mm/u) | [OpenWeather Current Weather](https://openweathermap.org/current) | "Live"-modus |
+| Place search | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | name → coordinates |
+| Daily rainfall, last 10 years | [Open-Meteo Historical Weather](https://open-meteo.com/en/docs/historical-weather-api) | climate and simulation in the planner |
+| Current rain (mm/h) | [OpenWeather Current Weather](https://openweathermap.org/current) | "Live" mode |
 
-Er zijn geen afbeeldingen of modellen nodig: textures, lucht, gras en dieren worden in code gegenereerd.
+No images or models are needed: textures, sky, grass and animals are generated in code.
 
-## Modellen en formules
+## Models and formulas
 
-**Opbrengst van het dak** (`rainwater-project/src/scene/sizing.ts`, `RUNOFF_COEFFICIENT`)
-
-```
-liters = regen (mm) × dakoppervlak (m²) × 0,9        (1 mm op 1 m² = 1 liter; 0,9 = verlies door spatten en first flush)
-```
-
-**Waterbalans per dag** over de 10 jaar neerslag (zonder plaats: een typisch klimaat met het gemiddelde dat je invult):
+**Roof yield** (`rainwater-project/src/scene/sizing.ts`, `RUNOFF_COEFFICIENT`)
 
 ```
-niveau += regen × dak × 0,9
-overloop = max(0, niveau − tankvolume)        niveau = min(niveau, tankvolume)
-verbruik = min(niveau, liters per dag)        tekort = vraag − verbruik
-betrouwbaarheid = 1 − totaal tekort / totale vraag
+litres = rainfall (mm) × roof area (m²) × 0.9        (1 mm on 1 m² = 1 litre; 0.9 = losses from splashing and first flush)
 ```
 
-**Advies:** per dakmaat zoekt de planner met bisectie het kleinste tankvolume dat het gewenste percentage haalt (maximaal 30 000 L). De "gebalanceerde" keuze is de combinatie met het kleinste dak en de kleinste tank samen (beide geschaald op hun maximum).
-
-**Scène** (`rainwater-project/src/components/RainSystem.vue`)
-- Intensiteit ↔ mm/u: `intensiteit = 1 − e^(−mm/8)`.
-- Elke gesimuleerde druppel op het dak staat voor `liter per druppel = (mm × m² × 0,9 / 3600 × tijdversnelling) / druppels per seconde`, zodat de instroom klopt met de formule hierboven, ongeacht het aantal druppels. De tijdversnelling (×1 … ×1440) versnelt alleen het vullen en leegmaken in de scène.
-- Het dak (beide hellingen, bovenaanzicht) is `2 × 3,2 m × lengte`; de lengte volgt uit het gekozen oppervlak. De goot hangt vast aan de voorkant en loopt naar de regenpijp; de linkerhelling gaat via een ondergrondse pijp naar de tanks.
-- Druppels op het dak blijven eerst plakken en glijden dan weg (grotere druppels sneller); de rest is eenvoudige ballistiek met zwaartekracht en luchtweerstand.
-- Waterspiegel in de ton: golfvergelijking op een raster (`rainwater-project/src/components/BarrelWater.vue`).
-
-**Zon en lucht** (`rainwater-project/src/scene/daylight.ts`): zonshoogte `sin((uur − 6)/12 · π)`, opkomst 6:00, ondergang 18:00; kleuren en licht volgen daaruit en uit de regenintensiteit.
-
-**Overstroming** (`rainwater-project/src/components/Flood.vue`): waterstand stijgt tot een limiet; tsunami's zijn golven `A · e^(−(d/b)²)` met een steile voorkant (3,5 m) en lange staart (10 m), berekend op de videokaart.
-
-**Spraak** (`rainwater-project/src/scene/voice.ts`): browser-spraakherkenning (Web Speech API) geeft tekst; trefwoorden (regex, Nederlands en Engels) kiezen de opdracht en lezen de getallen. Geen taalmodel.
-
-## Mappen
+**Daily water balance** over the 10 years of rainfall (without a location: a typical climate with the average you enter):
 
 ```
-rainwater-project/src/components   3D-onderdelen (huis, regen, water, gras, dieren) en panelen (RainHud, VoiceControl, RainCharts)
-rainwater-project/src/scene        berekeningen en gedeelde toestand (sizing, climate, weather, planner, voice, daylight)
+level += rainfall × roof × 0.9
+overflow = max(0, level − tank volume)        level = min(level, tank volume)
+supplied = min(level, litres per day)         shortage = demand − supplied
+reliability = 1 − total shortage / total demand
+```
+
+**Recommendation:** for each roof size the planner uses bisection to find the smallest tank volume that reaches the wanted percentage (at most 30,000 L). The "balanced" choice is the combination with the smallest roof and tank together (both scaled to their maximum).
+
+**Scene** (`rainwater-project/src/components/RainSystem.vue`)
+- Intensity ↔ mm/h: `intensity = 1 − e^(−mm/8)`.
+- Every simulated drop that lands on the roof stands for `litres per drop = (mm × m² × 0.9 / 3600 × time-lapse) / drops per second`, so the inflow matches the formula above whatever the number of drops. The time-lapse (×1 … ×1440) only speeds up filling and emptying in the scene.
+- The roof (both slopes, plan view) is `2 × 3.2 m × length`; the length follows from the chosen area. The gutter is fixed at the front and runs to the downspout; the left slope drains through an underground pipe to the tanks.
+- Drops on the roof first stick and then slide off (larger drops faster); the rest is simple ballistics with gravity and air drag.
+- Water surface in the barrel: a wave equation on a grid (`rainwater-project/src/components/BarrelWater.vue`).
+
+**Sun and sky** (`rainwater-project/src/scene/daylight.ts`): sun height `sin((hour − 6)/12 · π)`, sunrise at 6:00, sunset at 18:00; colours and light follow from that and from the rain intensity.
+
+**Flood** (`rainwater-project/src/components/Flood.vue`): the water level rises to a limit; tsunamis are waves `A · e^(−(d/b)²)` with a steep front (3.5 m) and a long tail (10 m), computed on the GPU.
+
+**Voice** (`rainwater-project/src/scene/voice.ts`): the browser's speech recognition (Web Speech API) returns text; keywords (regex, Dutch and English) pick the command and read the numbers. No language model.
+
+## Folders
+
+```
+rainwater-project/src/components   3D parts (house, rain, water, grass, animals) and panels (RainHud, VoiceControl, RainCharts)
+rainwater-project/src/scene        calculations and shared state (sizing, climate, weather, planner, voice, daylight)
 ```
