@@ -1,95 +1,103 @@
-# rainwater-project
+# Regenwaterplanner
 
-> A TresJS Vue application
+Een 3D-scène (TresJS + three.js, WebGPU) van een huis met regenput, om te zien en te berekenen **hoe groot je dak en je regentanks moeten zijn** voor een bepaald waterverbruik. Regen valt, loopt over het dak door de goot naar de tank, en een planner rekent met echte neerslagcijfers van jouw plaats. Je bedient alles met sliders, met je stem ("Hey water, vergroot het dak naar 135 vierkante meter") of met getypte opdrachten.
 
-## Features
+## Starten
 
-- [Tres.js](https://tresjs.org) and latest [Three.js](https://threejs.org)
-- `@tresjs/cientos` package pre-installed 📦
-- `@tresjs/leches` GUI controls for debugging 🍰
-- Shader support (glsl) with [`vite-plugin-glsl`](https://github.com/UstymUkhman/vite-plugin-glsl) 🎨
-- TypeScript support 🦄
-- ESLint configuration 🔧
+### Wat je nodig hebt
+- **Node.js 20.19+ of 22.12+** (nodig voor Vite 8; getest met Node 24).
+- **[Bun](https://bun.sh)** (aanbevolen: de `bun.lock` legt de versies vast, want in `package.json` staat overal `latest`) of npm.
+- **Chrome of Edge**, recent. Die hebben WebGPU en spraakherkenning.
+- Internet (voor de regencijfers en spraakherkenning).
 
-## Getting Started
-
-### Install dependencies
+### Stappen
+Alle commando's draai je **in de map `rainwater-project`** (niet in de hoofdmap van de repository).
 
 ```bash
-npm install
+cd rainwater-project
+bun install          # eenmalig; installeert de pakketten uit bun.lock
+bun dev              # start de ontwikkelserver
 ```
 
-### Development
+Met npm: `npm install` en daarna `npm run dev`. Gebruik je npm zonder lockfile, dan kunnen nieuwere pakketversies dingen breken.
 
-Start the development server:
+Open daarna **http://localhost:5173** (de terminal toont het adres; is de poort bezet, dan kiest Vite de volgende, zoals 5174). Stoppen doe je met `Ctrl+C`.
 
+### Een productieversie bouwen (optioneel)
 ```bash
-npm run dev
+bunx vite build      # maakt de map dist/
+bunx vite preview    # bekijkt die versie op http://localhost:4173
+```
+(`npm run build` voert eerst ook een typecontrole uit met `vue-tsc`; die draait niet op elke machine.)
+
+### Live weer instellen (optioneel)
+Alleen nodig voor de knop **Live**. Al het andere, ook de planner met echte regencijfers, werkt zonder sleutel.
+
+1. Maak een gratis sleutel bij [OpenWeather](https://openweathermap.org/api) (een nieuwe sleutel kan een paar uur duren voor hij werkt).
+2. Kopieer `.env.example` naar `.env.local` en vul in: `OPENWEATHER_API_KEY=jouwsleutel`.
+3. **Herstart `bun dev`** (de sleutel wordt alleen bij het opstarten gelezen).
+
+`.env.local` staat in `.gitignore`. De dev-server voegt de sleutel server-side toe (`vite.config.ts`), dus hij komt niet in de browsercode. Live weer werkt daarom alleen via `bun dev` of `vite preview`, niet op statische hosting.
+
+### Gebruiken
+1. Typ je stad bovenin het paneel en druk op **Go**: de planner gebruikt dan de echte regen van jouw plaats.
+2. Tabblad **Plan**: vul je dagverbruik in en kijk welk dak en welke tanks nodig zijn.
+3. Spraak: klik op de microfoon (of zet **Hey water** aan) en zeg bijvoorbeeld "vergroot het dak naar 135 vierkante meter". Je kunt dezelfde opdrachten ook typen.
+
+### Problemen oplossen
+| Probleem | Oplossing |
+|---|---|
+| Zwart scherm of foutmelding over WebGPU | Update Chrome/Edge en je grafische driver; controleer `chrome://gpu`. Zonder WebGPU valt de app terug op WebGL2, maar dat kan trager zijn. |
+| `bun: command not found` | Installeer Bun, of gebruik `npm install` en `npm run dev`. |
+| "Weather API key missing or invalid" | Sleutel ontbreekt, is nog niet actief, of de server is niet herstart na het invullen. |
+| Microfoon werkt niet | Sta de microfoon toe in de browser (slotje in de adresbalk) en gebruik Chrome of Edge. Typen en de knoppen werken altijd. |
+| De scène hapert | Zet de regen lager, gebruik een kleinere dakgrootte, of verlaag `COUNT` in `src/components/GrassField.vue`. |
+
+## Bronnen van data
+
+| Data | Bron | Gebruik |
+|---|---|---|
+| Plaats zoeken | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | naam → coördinaten |
+| Dagelijkse neerslag, laatste 10 jaar | [Open-Meteo Historical Weather](https://open-meteo.com/en/docs/historical-weather-api) | klimaat en simulatie in de planner |
+| Huidige regen (mm/u) | [OpenWeather Current Weather](https://openweathermap.org/current) | "Live"-modus |
+
+Er zijn geen afbeeldingen of modellen nodig: textures, lucht, gras en dieren worden in code gegenereerd.
+
+## Modellen en formules
+
+**Opbrengst van het dak** (`scene/sizing.ts`, `RUNOFF_COEFFICIENT`)
+
+```
+liters = regen (mm) × dakoppervlak (m²) × 0,9        (1 mm op 1 m² = 1 liter; 0,9 = verlies door spatten en first flush)
 ```
 
-### Build
+**Waterbalans per dag** over de 10 jaar neerslag (zonder plaats: een typisch klimaat met het gemiddelde dat je invult):
 
-Build the application for production:
-
-```bash
-npm run build
+```
+niveau += regen × dak × 0,9
+overloop = max(0, niveau − tankvolume)        niveau = min(niveau, tankvolume)
+verbruik = min(niveau, liters per dag)        tekort = vraag − verbruik
+betrouwbaarheid = 1 − totaal tekort / totale vraag
 ```
 
-### Preview
+**Advies:** per dakmaat zoekt de planner met bisectie het kleinste tankvolume dat het gewenste percentage haalt (maximaal 30 000 L). De "gebalanceerde" keuze is de combinatie met het kleinste dak en de kleinste tank samen (beide geschaald op hun maximum).
 
-Locally preview production build:
+**Scène** (`components/RainSystem.vue`)
+- Intensiteit ↔ mm/u: `intensiteit = 1 − e^(−mm/8)`.
+- Elke gesimuleerde druppel op het dak staat voor `liter per druppel = (mm × m² × 0,9 / 3600 × tijdversnelling) / druppels per seconde`, zodat de instroom klopt met de formule hierboven, ongeacht het aantal druppels. De tijdversnelling (×1 … ×1440) versnelt alleen het vullen en leegmaken in de scène.
+- Het dak (beide hellingen, bovenaanzicht) is `2 × 3,2 m × lengte`; de lengte volgt uit het gekozen oppervlak. De goot hangt vast aan de voorkant en loopt naar de regenpijp; de linkerhelling gaat via een ondergrondse pijp naar de tanks.
+- Druppels op het dak blijven eerst plakken en glijden dan weg (grotere druppels sneller); de rest is eenvoudige ballistiek met zwaartekracht en luchtweerstand.
+- Waterspiegel in de ton: golfvergelijking op een raster (`components/BarrelWater.vue`).
 
-```bash
-npm run preview
+**Zon en lucht** (`scene/daylight.ts`): zonshoogte `sin((uur − 6)/12 · π)`, opkomst 6:00, ondergang 18:00; kleuren en licht volgen daaruit en uit de regenintensiteit.
+
+**Overstroming** (`components/Flood.vue`): waterstand stijgt tot een limiet; tsunami's zijn golven `A · e^(−(d/b)²)` met een steile voorkant (3,5 m) en lange staart (10 m), berekend op de videokaart.
+
+**Spraak** (`scene/voice.ts`): browser-spraakherkenning (Web Speech API) geeft tekst; trefwoorden (regex, Nederlands en Engels) kiezen de opdracht en lezen de getallen. Geen taalmodel.
+
+## Mappen
+
 ```
-
-### Lint
-
-Run ESLint:
-
-```bash
-npm run lint
+src/components   3D-onderdelen (huis, regen, water, gras, dieren) en panelen (RainHud, VoiceControl, RainCharts)
+src/scene        berekeningen en gedeelde toestand (sizing, climate, weather, planner, voice, daylight)
 ```
-
-Fix ESLint issues:
-
-```bash
-npm run lint:fix
-```
-
-## Learn More
-
-- [TresJS Documentation](https://tresjs.org)
-- [Three.js Documentation](https://threejs.org/docs/)
-- [Vue.js Documentation](https://vuejs.org/)
-## Planning your roof and tanks
-
-1. Type your city in the planner and press Go. The app downloads the last ten years of daily rainfall for it
-   (free [Open-Meteo](https://open-meteo.com/) API, no key needed).
-2. Fill in your daily water use and how much of it the rain should cover (reliability).
-3. The planner runs a day-by-day water balance of roof + tank over those ten years and shows the tank volume
-   needed for each roof size, a "balanced" choice, and how reliability grows with tank volume.
-
-Model: `litres = rainfall (mm) x roof area (m2) x 0.9`, tank overflow above its volume, daily use taken from the tank.
-Without a location a typical climate with the average rainfall you enter is used.
-
-## Live weather
-
-The "Live" mode fetches the current rainfall at your location from [OpenWeather](https://openweathermap.org/api).
-
-1. Create a free API key.
-2. Copy `.env.example` to `.env.local` and put the key in `OPENWEATHER_API_KEY` (`.env.local` is git-ignored).
-3. Restart `bun dev`.
-
-The key is added by the Vite dev/preview server (see `vite.config.ts`), so it is never bundled into the browser code.
-A static deployment would need an equivalent small proxy. The rainfall statistics above do not need a key.
-
-## Voice commands
-
-The panel at the bottom of the screen takes spoken (Chrome / Edge / Safari, Web Speech API) or typed commands in
-English or Dutch, shows what it heard and what it did, and has buttons as a fallback. Values are understood:
-
-- "Increase the roof size to 135 square meters" / "Dak naar 135 vierkante meter"
-- "Use 200 liters per day" · "3 tanks of 2000 liters" · "Reliability 95 percent"
-- "Set the time to 15" / "Zet de zon op 15 uur" · "More rain" · "More wind" · "Location Ghent"
-- "What do I need?" then "Apply that" · "How much water is in the tank?" · "Empty the tank"
