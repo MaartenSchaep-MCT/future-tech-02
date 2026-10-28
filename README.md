@@ -34,10 +34,10 @@ bunx vite preview    # bekijkt die versie op http://localhost:4173
 Alleen nodig voor de knop **Live**. Al het andere, ook de planner met echte regencijfers, werkt zonder sleutel.
 
 1. Maak een gratis sleutel bij [OpenWeather](https://openweathermap.org/api) (een nieuwe sleutel kan een paar uur duren voor hij werkt).
-2. Kopieer `.env.example` naar `.env.local` en vul in: `OPENWEATHER_API_KEY=jouwsleutel`.
+2. Kopieer `rainwater-project/.env.example` naar `rainwater-project/.env.local` en vul in: `OPENWEATHER_API_KEY=jouwsleutel`.
 3. **Herstart `bun dev`** (de sleutel wordt alleen bij het opstarten gelezen).
 
-`.env.local` staat in `.gitignore`. De dev-server voegt de sleutel server-side toe (`vite.config.ts`), dus hij komt niet in de browsercode. Live weer werkt daarom alleen via `bun dev` of `vite preview`, niet op statische hosting.
+`rainwater-project/.env.local` staat in `.gitignore`. De dev-server voegt de sleutel server-side toe (`rainwater-project/vite.config.ts`), dus hij komt niet in de browsercode. Live weer werkt daarom alleen via `bun dev` of `vite preview`, niet op statische hosting.
 
 ### Gebruiken
 1. Typ je stad bovenin het paneel en druk op **Go**: de planner gebruikt dan de echte regen van jouw plaats.
@@ -51,7 +51,7 @@ Alleen nodig voor de knop **Live**. Al het andere, ook de planner met echte rege
 | `bun: command not found` | Installeer Bun, of gebruik `npm install` en `npm run dev`. |
 | "Weather API key missing or invalid" | Sleutel ontbreekt, is nog niet actief, of de server is niet herstart na het invullen. |
 | Microfoon werkt niet | Sta de microfoon toe in de browser (slotje in de adresbalk) en gebruik Chrome of Edge. Typen en de knoppen werken altijd. |
-| De scène hapert | Zet de regen lager, gebruik een kleinere dakgrootte, of verlaag `COUNT` in `src/components/GrassField.vue`. |
+| De scène hapert | Zet de regen lager, gebruik een kleinere dakgrootte, of verlaag `COUNT` in `rainwater-project/src/components/GrassField.vue`. |
 
 ## Bronnen van data
 
@@ -65,7 +65,7 @@ Er zijn geen afbeeldingen of modellen nodig: textures, lucht, gras en dieren wor
 
 ## Modellen en formules
 
-**Opbrengst van het dak** (`scene/sizing.ts`, `RUNOFF_COEFFICIENT`)
+**Opbrengst van het dak** (`rainwater-project/src/scene/sizing.ts`, `RUNOFF_COEFFICIENT`)
 
 ```
 liters = regen (mm) × dakoppervlak (m²) × 0,9        (1 mm op 1 m² = 1 liter; 0,9 = verlies door spatten en first flush)
@@ -82,22 +82,22 @@ betrouwbaarheid = 1 − totaal tekort / totale vraag
 
 **Advies:** per dakmaat zoekt de planner met bisectie het kleinste tankvolume dat het gewenste percentage haalt (maximaal 30 000 L). De "gebalanceerde" keuze is de combinatie met het kleinste dak en de kleinste tank samen (beide geschaald op hun maximum).
 
-**Scène** (`components/RainSystem.vue`)
+**Scène** (`rainwater-project/src/components/RainSystem.vue`)
 - Intensiteit ↔ mm/u: `intensiteit = 1 − e^(−mm/8)`.
 - Elke gesimuleerde druppel op het dak staat voor `liter per druppel = (mm × m² × 0,9 / 3600 × tijdversnelling) / druppels per seconde`, zodat de instroom klopt met de formule hierboven, ongeacht het aantal druppels. De tijdversnelling (×1 … ×1440) versnelt alleen het vullen en leegmaken in de scène.
 - Het dak (beide hellingen, bovenaanzicht) is `2 × 3,2 m × lengte`; de lengte volgt uit het gekozen oppervlak. De goot hangt vast aan de voorkant en loopt naar de regenpijp; de linkerhelling gaat via een ondergrondse pijp naar de tanks.
 - Druppels op het dak blijven eerst plakken en glijden dan weg (grotere druppels sneller); de rest is eenvoudige ballistiek met zwaartekracht en luchtweerstand.
-- Waterspiegel in de ton: golfvergelijking op een raster (`components/BarrelWater.vue`).
+- Waterspiegel in de ton: golfvergelijking op een raster (`rainwater-project/src/components/BarrelWater.vue`).
 
-**Zon en lucht** (`scene/daylight.ts`): zonshoogte `sin((uur − 6)/12 · π)`, opkomst 6:00, ondergang 18:00; kleuren en licht volgen daaruit en uit de regenintensiteit.
+**Zon en lucht** (`rainwater-project/src/scene/daylight.ts`): zonshoogte `sin((uur − 6)/12 · π)`, opkomst 6:00, ondergang 18:00; kleuren en licht volgen daaruit en uit de regenintensiteit.
 
-**Overstroming** (`components/Flood.vue`): waterstand stijgt tot een limiet; tsunami's zijn golven `A · e^(−(d/b)²)` met een steile voorkant (3,5 m) en lange staart (10 m), berekend op de videokaart.
+**Overstroming** (`rainwater-project/src/components/Flood.vue`): waterstand stijgt tot een limiet; tsunami's zijn golven `A · e^(−(d/b)²)` met een steile voorkant (3,5 m) en lange staart (10 m), berekend op de videokaart.
 
-**Spraak** (`scene/voice.ts`): browser-spraakherkenning (Web Speech API) geeft tekst; trefwoorden (regex, Nederlands en Engels) kiezen de opdracht en lezen de getallen. Geen taalmodel.
+**Spraak** (`rainwater-project/src/scene/voice.ts`): browser-spraakherkenning (Web Speech API) geeft tekst; trefwoorden (regex, Nederlands en Engels) kiezen de opdracht en lezen de getallen. Geen taalmodel.
 
 ## Mappen
 
 ```
-src/components   3D-onderdelen (huis, regen, water, gras, dieren) en panelen (RainHud, VoiceControl, RainCharts)
-src/scene        berekeningen en gedeelde toestand (sizing, climate, weather, planner, voice, daylight)
+rainwater-project/src/components   3D-onderdelen (huis, regen, water, gras, dieren) en panelen (RainHud, VoiceControl, RainCharts)
+rainwater-project/src/scene        berekeningen en gedeelde toestand (sizing, climate, weather, planner, voice, daylight)
 ```
