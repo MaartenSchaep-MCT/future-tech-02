@@ -166,8 +166,9 @@ const toggleApocalypse = () => {
         </div>
         <div class="sub">Average of the last {{ ui.climate.years.toFixed(0) }} years (Open-Meteo)</div>
       </template>
+      <div v-else-if="ui.climate.loading" class="sub">Loading ten years of rainfall for {{ ui.place.name || 'your location' }}…</div>
       <template v-else>
-        <div class="sub">Search for your city above to use its real rainfall. Until then a typical climate is used:</div>
+        <div class="sub">No location yet. Type your city in the box at the top of this panel and press Go to use its real rainfall. Until then a typical climate is used. You can change its average here:</div>
         <label class="inline">Average rain <input v-model.number="ui.avgRainMmDay" type="number" min="0.2" max="12" step="0.1" /> mm/day <span class="muted">({{ (ui.avgRainMmDay * 365).toFixed(0) }} mm/year)</span></label>
       </template>
 
