@@ -56,15 +56,16 @@ const updatedAgo = computed(() => {
 
 // ---- Plan: sizing the roof and the tanks ----
 const MAX_TANKS = 10
-const ROOF_SIZES = [20, 30, 40, 60, 80, 100, 120]
+const ROOF_SIZES = [40, 60, 80, 100, 130, 160, 200, 250]
+// Typical non-drinking use of a family of four (toilets ~120 L/day, washing machine ~50 L/day, garden varies)
 const usePresets = [
-  { name: 'Garden', litres: 100 },
-  { name: 'Toilets', litres: 150 },
-  { name: 'Garden + toilets', litres: 300 },
-  { name: 'Household', litres: 500 },
+  { name: 'Toilets', litres: 120 },
+  { name: 'Toilets + laundry', litres: 170 },
+  { name: 'Garden', litres: 150 },
+  { name: 'All of it', litres: 350 },
 ]
 const timeLapses = [1, 10, 60, 300, 1440]
-const roofLength = computed(() => ui.roofArea / eaveX)
+const roofLength = computed(() => ui.roofArea / (2 * eaveX))
 
 // Rainfall series the calculations run on: the real history of the location, or a typical climate before that
 const series = computed(() => {
@@ -77,11 +78,18 @@ const options = computed(() => roofOptions(series.value, ui.dailyUseL, target.va
 const balanced = computed(() => balancedOption(options.value))
 const smallestRoof = computed(() => options.value.find((o) => o.tank !== null)?.area ?? null)
 
-const tanksFor = (litres: number) => Math.max(1, Math.min(MAX_TANKS, Math.ceil(litres / ui.tankSize)))
+// Common tank sizes: pick the smallest one that keeps the number of tanks reasonable (at most 4)
+const TANK_SIZES = [300, 500, 1000, 2000, 3000, 5000]
+const suggestTanks = (litres: number) => {
+  const size = TANK_SIZES.find((s) => Math.ceil(litres / s) <= 4) ?? TANK_SIZES[TANK_SIZES.length - 1]
+  return { size, count: Math.max(1, Math.min(MAX_TANKS, Math.ceil(litres / size))) }
+}
 const applyOption = (area: number, tank: number) => {
+  const { size, count } = suggestTanks(tank)
   ui.roofAuto = false
   ui.roofArea = area
-  ui.tanks = tanksFor(tank)
+  ui.tankSize = size
+  ui.tanks = count
 }
 
 // Reliability against tank volume for the current roof (SVG chart)
@@ -206,8 +214,8 @@ const toggleApocalypse = () => {
 
       <h3>Your system</h3>
       <label class="row">
-        <span>Roof surface</span>
-        <strong>{{ ui.roofArea.toFixed(0) }} m² <span class="muted">({{ roofLength.toFixed(1) }} m long)</span></strong>
+        <span>Roof surface <span class="muted">(both slopes)</span></span>
+        <strong>{{ ui.roofArea.toFixed(0) }} m² <span class="muted">({{ roofLength.toFixed(1) }} m long house)</span></strong>
       </label>
       <input v-model.number="ui.roofArea" type="range" :min="MIN_ROOF_AREA" :max="MAX_ROOF_AREA" step="1" :disabled="ui.roofAuto" aria-label="Roof surface" />
       <label class="check">
@@ -218,7 +226,8 @@ const toggleApocalypse = () => {
         <span>Tank size</span>
         <strong>{{ ui.tankSize }} L</strong>
       </label>
-      <input v-model.number="ui.tankSize" type="range" min="50" max="1000" step="10" aria-label="Tank size" />
+      <input v-model.number="ui.tankSize" type="range" min="100" max="5000" step="50" aria-label="Tank size" />
+      <div class="sub">A typical house roof is 80–150 m². Family systems use one or two 3000–5000 L tanks.</div>
       <div class="row stepper">
         <span>Number of tanks <span class="muted">= {{ fmt(ui.capacity) }} L</span></span>
         <span class="step-controls">
@@ -253,7 +262,7 @@ const toggleApocalypse = () => {
             >
               <span>{{ o.area }} m²<em v-if="balanced && o.area === balanced.area"> ★</em></span>
               <span>{{ o.tank === null ? '—' : fmt(o.tank) + ' L' }}</span>
-              <span>{{ o.tank === null ? '' : Math.ceil(o.tank / ui.tankSize) + ' × ' + ui.tankSize + ' L' }}</span>
+              <span>{{ o.tank === null ? '' : suggestTanks(o.tank).count + ' × ' + suggestTanks(o.tank).size + ' L' }}</span>
             </button>
           </div>
           <button v-if="balanced" class="primary" @click="applyOption(balanced.area, balanced.tank)">

@@ -17,7 +17,7 @@ export const ui = reactive({
   capacity: CAPACITY, // total storage in litres = tankSize * tanks (kept up to date below)
   tankSize: CAPACITY, // litres of one tank
   tanks: 1,
-  roofArea: DEFAULT_ROOF_AREA, // m2 of roof draining into the gutter
+  roofArea: DEFAULT_ROOF_AREA, // m2 of roof (both slopes) draining into the gutters
   roofAuto: false, // size the roof automatically so the rain covers the usage
   avgRainMmDay: 2.2, // average daily rainfall; replaced by the real climate average once a location is loaded
   dailyUseL: 150, // litres of water used per day: the demand the roof and tanks have to cover
@@ -65,8 +65,9 @@ watchEffect(() => {
 
 // Plain (non-reactive) values read every frame by the 3D scene
 export const world = {
-  roofBackZ: ROOF_FRONT_Z - DEFAULT_ROOF_AREA / eaveX, // z of the back end of the roof (see houseGeometry)
+  roofBackZ: ROOF_FRONT_Z - DEFAULT_ROOF_AREA / (2 * eaveX), // z of the back end of the roof (see houseGeometry)
   chimneyZ: -2,
+  gutterTilt: 0.03,
   wallBackZ: -5,
   floodY: 0, // flood surface height, or -10 when there is no flood
   waterLevel: 0, // base flood level (>= 0), without the tsunami fronts

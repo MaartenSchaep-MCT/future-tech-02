@@ -26,22 +26,27 @@ export const barrelHeight = 1.4
 
 // World-space helpers used by the rain simulation
 export const roofSurfaceY = (absX: number) => HOUSE_Y + ridgeY - absX * roofSlope + roofThickness / 2 + 0.02
-export const gutterWorldY = (z: number) => HOUSE_Y + gutterY - gutterRadius * 0.6 - gutterSlope * z
+// The gutter is pinned at its front end (above the downspout) and rises towards the back by `tilt` per metre.
+// A long roof gets a gentler tilt so the gutter never strays far from the eave (see houseGeometry).
+export const gutterWorldY = (z: number, tilt = gutterSlope) =>
+  HOUSE_Y + gutterY - gutterRadius * 0.6 - gutterSlope * (roofLength / 2) + tilt * (roofLength / 2 - z)
 export const BARREL_FLOOR_Y = HOUSE_Y + floorY
 export const BARREL_TOP_Y = BARREL_FLOOR_Y + barrelHeight
 export const DOWNSPOUT_BOTTOM_Y = BARREL_TOP_Y - 0.15
 
 // ---- Roof size ----
 // The roof can be longer or shorter than the default. It always keeps its front end (where the downspout and the
-// barrel are) in place and grows or shrinks towards the back. The gutter-side roof area in m2 = eaveX * roof length.
+// barrel are) in place and grows or shrinks towards the back. The roof area in m2 = 2 * eaveX * roof length (two slopes).
 export const ROOF_FRONT_Z = roofLength / 2
 export const WALL_FRONT_Z = houseLength / 2
-export const DEFAULT_ROOF_AREA = eaveX * roofLength
-export const MIN_ROOF_AREA = 15
-export const MAX_ROOF_AREA = 120
+// Roof area = the whole roof (both slopes, measured in plan view), as used in rainwater harvesting.
+// Both slopes drain into gutters that lead to the tanks.
+export const DEFAULT_ROOF_AREA = 2 * eaveX * roofLength
+export const MIN_ROOF_AREA = 30
+export const MAX_ROOF_AREA = 250
 
 export const houseGeometry = (roofArea: number) => {
-  const roofLen = Math.max(3, roofArea / eaveX)
+  const roofLen = Math.max(3, roofArea / (2 * eaveX))
   const wallLen = roofLen - 0.8
   return {
     roofLen,
@@ -51,5 +56,6 @@ export const houseGeometry = (roofArea: number) => {
     roofBackZ: ROOF_FRONT_Z - roofLen,
     wallBackZ: WALL_FRONT_Z - wallLen,
     chimneyZ: WALL_FRONT_Z - Math.min(wallLen - 1.5, 7),
+    gutterTilt: Math.min(gutterSlope, (gutterSlope * roofLength) / roofLen), // total drop stays at most the default's
   }
 }

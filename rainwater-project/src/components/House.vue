@@ -6,7 +6,7 @@ import {
   houseWidth, houseHeight, houseLength, floorY,
   eaveX, eaveY, ridgeY, roofThickness, roofLength, roofSlope,
   gutterX, gutterY, gutterRadius, gutterSlope, downspoutZ,
-  barrelRadius, barrelHeight, houseGeometry, WALL_FRONT_Z,
+  barrelRadius, barrelHeight, houseGeometry, WALL_FRONT_Z, ROOF_FRONT_Z,
 } from '../scene/config'
 import { plasterTexture, roofTileTexture } from '../scene/textures'
 import { ui } from '../scene/rainState'
@@ -139,12 +139,28 @@ const roofRoughness = computed(() => 0.85 - ui.wetness * 0.45)
   </template>
 
   <!-- Gutter: half pipe along the +x eave, tilted so water runs towards the downspout (+z) -->
-  <TresGroup :position="[gutterX, gutterY, 0]" :rotation="[gutterSlope, 0, 0]">
-    <TresMesh :position="[0, 0, geo.roofCenterZ]" :rotation="[Math.PI / 2, 0, 0]">
+  <TresGroup :position="[gutterX, gutterY - gutterSlope * ROOF_FRONT_Z, ROOF_FRONT_Z]" :rotation="[geo.gutterTilt, 0, 0]">
+    <TresMesh :position="[0, 0, -geo.roofLen / 2]" :rotation="[Math.PI / 2, 0, 0]">
       <TresCylinderGeometry :args="[gutterRadius, gutterRadius, geo.roofLen, 16, 1, true, -Math.PI / 2, Math.PI]" />
       <TresMeshStandardMaterial color="#9aa3ab" :metalness="0.7" :roughness="0.4" :side="DoubleSide" />
     </TresMesh>
   </TresGroup>
+
+  <!-- Left gutter and downspout: the left slope drains too; its pipe runs underground to the tanks -->
+  <TresGroup :position="[-gutterX, gutterY - gutterSlope * ROOF_FRONT_Z, ROOF_FRONT_Z]" :rotation="[geo.gutterTilt, 0, 0]">
+    <TresMesh :position="[0, 0, -geo.roofLen / 2]" :rotation="[Math.PI / 2, 0, 0]">
+      <TresCylinderGeometry :args="[gutterRadius, gutterRadius, geo.roofLen, 16, 1, true, -Math.PI / 2, Math.PI]" />
+      <TresMeshStandardMaterial color="#9aa3ab" :metalness="0.7" :roughness="0.4" :side="DoubleSide" />
+    </TresMesh>
+  </TresGroup>
+  <TresMesh :position="[-gutterX, (gutterY - gutterSlope * ROOF_FRONT_Z - gutterRadius + floorY) / 2, downspoutZ]">
+    <TresCylinderGeometry :args="[0.07, 0.07, gutterY - gutterSlope * ROOF_FRONT_Z - gutterRadius - floorY, 12]" />
+    <TresMeshStandardMaterial color="#9aa3ab" :metalness="0.7" :roughness="0.4" />
+  </TresMesh>
+  <TresMesh :position="[-gutterX, floorY + 0.03, downspoutZ]">
+    <TresCylinderGeometry :args="[0.14, 0.14, 0.06, 14]" />
+    <TresMeshStandardMaterial color="#3a3d42" :roughness="0.8" />
+  </TresMesh>
 
   <!-- Downspout from the gutter into the barrel -->
   <TresMesh :position="[gutterX, downspoutBottomY + downspoutHeight / 2, downspoutZ]">

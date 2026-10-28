@@ -358,9 +358,10 @@ onBeforeRender(({ delta, elapsed }) => {
   const geometry = houseGeometry(ui.roofArea)
   world.roofBackZ = geometry.roofBackZ
   world.chimneyZ = geometry.chimneyZ
+  world.gutterTilt = geometry.gutterTilt
   world.wallBackZ = geometry.wallBackZ
   const rainCenterZ = (ROOF_FRONT_Z + geometry.roofBackZ) / 2 // keep the rain over the whole (possibly long) roof
-  const catchment = geometry.roofLen * eaveX // m2 that actually drains into the gutter
+  const catchment = geometry.roofLen * eaveX * 2 // m2 of roof (both slopes) that drains into the gutters
   const hitsPerSecond = count * (AVG_FALL_SPEED / (SPAWN_Y + 2)) * (catchment / (AREA * AREA))
   litresPerDrop = hitsPerSecond > 0 ? ((mm * catchment * RUNOFF_COEFFICIENT) / 3600 * ui.timeLapse) / hitsPerSecond : 0
 
@@ -392,7 +393,7 @@ onBeforeRender(({ delta, elapsed }) => {
       } else if (ax <= eaveX + 0.05 && z <= ROOF_FRONT_Z && z >= world.roofBackZ && y < roofSurfaceY(ax)) {
         // Hit the roof: the water runs down towards the nearest eave
         const ry0 = roofSurfaceY(ax)
-        if (!spawnRunoff(x > 0 ? 0 : 1, x, ry0, z, 0.3 + Math.random() * 1.8) && x > 0) collect(elapsed, BARREL_X, BARREL_Z)
+        if (!spawnRunoff(x > 0 ? 0 : 1, x, ry0, z, 0.3 + Math.random() * 1.8) ) collect(elapsed, BARREL_X, BARREL_Z)
         if (Math.random() < 0.2) spawnFx(x, ry0, z, (Math.random() - 0.5), 1 + Math.random(), (Math.random() - 0.5), 0.3, 0.02)
         hit = true
       } else if (y < BARREL_TOP_Y && (x - BARREL_X) ** 2 + (z - BARREL_Z) ** 2 < (barrelRadius - 0.05) ** 2) {
@@ -463,18 +464,27 @@ onBeforeRender(({ delta, elapsed }) => {
           rx[i] = gutterX + (Math.random() - 0.5) * 0.08
           rSpeed[i] = 1.4 + Math.random() * 0.4
         } else {
-          // Drips off the left eave
-          spawnFx(rx[i], roofSurfaceY(eaveX), rz[i], -0.3, 0, 0, 3, 0.04)
-          rActive[i] = 0
-          continue
+          // Left slope: into the left gutter, which runs to its own downspout and an underground pipe to the tanks
+          rKind[i] = 6
+          rx[i] = -gutterX + (Math.random() - 0.5) * 0.08
+          rSpeed[i] = 1.4 + Math.random() * 0.4
         }
       } else {
         ry[i] = roofSurfaceY(ax) + 0.02
       }
+    } else if (kind === 6) {
+      // Left gutter: the water ends up in the tanks through the underground pipe
+      rz[i] += rSpeed[i] * dt
+      ry[i] = gutterWorldY(rz[i], world.gutterTilt)
+      if (rz[i] >= downspoutZ) {
+        collect(elapsed, BARREL_X, BARREL_Z)
+        rActive[i] = 0
+        continue
+      }
     } else if (kind === 2) {
       // Flowing along the gutter towards the downspout
       rz[i] += rSpeed[i] * dt
-      ry[i] = gutterWorldY(rz[i])
+      ry[i] = gutterWorldY(rz[i], world.gutterTilt)
       if (rz[i] >= downspoutZ) {
         rKind[i] = 3
         rz[i] = downspoutZ
@@ -508,7 +518,7 @@ onBeforeRender(({ delta, elapsed }) => {
         const stretch = 1 + rSpeed[i] * 0.55
         writeBlob(runoffArr, i, rx[i], ry[i] + 0.012, rz[i], dir * ROOF_COS, -sinP, 0, dir * sinP, ROOF_COS, 0, 0.03 * m * size * stretch, 0.026 * m * size, 0.014 * m * size)
       }
-    } else if (kind === 2) {
+    } else if (kind === 2 || kind === 6) {
       // A small stream in the gutter, elongated along the flow
       writeBlob(runoffArr, i, rx[i], ry[i] + 0.01, rz[i], 0, 0, 1, 0, 1, 0, 0.07 * size, 0.045 * size, 0.025 * size)
     } else {
