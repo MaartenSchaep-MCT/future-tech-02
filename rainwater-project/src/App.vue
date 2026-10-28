@@ -1,13 +1,25 @@
 <script setup lang="ts">
-import { TresCanvas } from '@tresjs/core'
+import { TresCanvas } from '@tresjs/core/webgpu'
+import { ACESFilmicToneMapping } from 'three'
 import TheExperience from './components/TheExperience.vue'
+import RainHud from './components/RainHud.vue'
+import RainCharts from './components/RainCharts.vue'
+import VoiceControl from './components/VoiceControl.vue'
+import { skyColor, ui } from './scene/rainState'
 </script>
 
 <template>
   <TresCanvas
-    clear-color="#82DBC5"
+    :clear-color="skyColor"
     window-size
+    :dpr="[1, 1.5]"
+    shadows
+    :tone-mapping="ACESFilmicToneMapping"
+    :tone-mapping-exposure="0.9"
   >
     <TheExperience />
   </TresCanvas>
+  <RainHud />
+  <VoiceControl />
+  <RainCharts v-if="ui.showCharts" />
 </template>

@@ -5,6 +5,19 @@ import { CameraControls, AccumulativeShadows, RandomizedLights } from '@tresjs/c
 import { useLoop } from '@tresjs/core'
 import { shallowRef, ref } from 'vue'
 import House from './House.vue'
+import Landscape from './Landscape.vue'
+import RainSystem from './RainSystem.vue'
+import SkyDome from './SkyDome.vue'
+import BarrelWater from './BarrelWater.vue'
+import RainCurtain from './RainCurtain.vue'
+import Puddles from './Puddles.vue'
+import WaterBlobs from './WaterBlobs.vue'
+import Flood from './Flood.vue'
+import Wildlife from './Wildlife.vue'
+import DayNight from './DayNight.vue'
+import ExtraTanks from './ExtraTanks.vue'
+import SceneEnvironment from './SceneEnvironment.vue'
+import { skyColor, ui } from '../scene/rainState'
 
 const houseRef = ref()
 // const { onBeforeRender } = useLoop()
@@ -24,23 +37,19 @@ const houseRef = ref()
 </script>
 
 <template>
-  <TresPerspectiveCamera :position="[25, 25, 25]" :look-at="[0, 0, 0]" />
-      <CameraControls />
-      <TresAmbientLight :intensity="0.5" />
-         <TresDirectionalLight :position="[5, 5, 5]" />
-  <!-- <TresMesh
-    ref="boxRef"
-    :position="[0, 2, 0]"
-  >
-    <TresBoxGeometry :args="[1, 1, 1]" />
-    <TresMeshNormalMaterial />
-  </TresMesh>
-  <TresDirectionalLight
-    :position="[0, 2, 4]"
-    :intensity="1"
-    cast-shadow
-  />  -->
+  <TresPerspectiveCamera :position="[25, 15, 25]" :look-at="[0, 1, 0]" :far="1200" />
+  <CameraControls :max-polar-angle="Math.PI / 2 - 0.05" :max-distance="130" />
+  <DayNight />
+  <SkyDome />
+  <SceneEnvironment />
   <House ref="houseRef" :position="[0, 1, 0]" />
-   <!-- <TresAxesHelper /> -->
-    <TresGridHelper :args="[100, 10]" />
+  <Landscape />
+  <Puddles />
+  <BarrelWater />
+  <ExtraTanks />
+  <RainSystem />
+  <WaterBlobs />
+  <Wildlife />
+  <Flood />
+  <RainCurtain />
 </template>
