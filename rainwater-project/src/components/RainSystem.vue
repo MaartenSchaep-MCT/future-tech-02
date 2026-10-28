@@ -346,7 +346,7 @@ onBeforeRender(({ delta, elapsed }) => {
   }
 
   // Gusting wind
-  const wind = WIND * (ui.apocalypse ? 2.2 : 1) * (1 + 0.6 * Math.sin(elapsed * 0.37) + 0.3 * Math.sin(elapsed * 1.13 + 2))
+  const wind = WIND * ui.windScale * (ui.apocalypse ? 2.2 : 1) * (1 + 0.6 * Math.sin(elapsed * 0.37) + 0.3 * Math.sin(elapsed * 1.13 + 2))
   const tilt = Math.atan2(wind, 22)
   const cosT = Math.cos(tilt)
   const sinT = Math.sin(tilt)

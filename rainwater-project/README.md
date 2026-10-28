@@ -83,3 +83,13 @@ The "Live" mode fetches the current rainfall at your location from [OpenWeather]
 
 The key is added by the Vite dev/preview server (see `vite.config.ts`), so it is never bundled into the browser code.
 A static deployment would need an equivalent small proxy. The rainfall statistics above do not need a key.
+
+## Voice commands
+
+The panel at the bottom of the screen takes spoken (Chrome / Edge / Safari, Web Speech API) or typed commands in
+English or Dutch, shows what it heard and what it did, and has buttons as a fallback. Values are understood:
+
+- "Increase the roof size to 135 square meters" / "Dak naar 135 vierkante meter"
+- "Use 200 liters per day" · "3 tanks of 2000 liters" · "Reliability 95 percent"
+- "Set the time to 15" / "Zet de zon op 15 uur" · "More rain" · "More wind" · "Location Ghent"
+- "What do I need?" then "Apply that" · "How much water is in the tank?" · "Empty the tank"

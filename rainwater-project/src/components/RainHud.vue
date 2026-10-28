@@ -5,7 +5,8 @@ import { mmFromIntensity, setPlace, startLive, stopLive } from '../scene/weather
 import { formatHour } from '../scene/daylight'
 import { MIN_ROOF_AREA, MAX_ROOF_AREA, eaveX } from '../scene/config'
 import { climateData } from '../scene/climate'
-import { balancedOption, reliabilityCurve, roofOptions, simulate, syntheticSeries } from '../scene/sizing'
+import { reliabilityCurve } from '../scene/sizing'
+import { MAX_TANKS, ROOF_SIZES, applyOption, balanced, current, options, series, smallestRoof, suggestTanks, target } from '../scene/planner'
 
 type Tab = 'plan' | 'weather' | 'world'
 const tabs: { id: Tab; label: string }[] = [
@@ -13,7 +14,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'weather', label: 'Weather' },
   { id: 'world', label: 'World' },
 ]
-const tab = ref<Tab>('plan')
+const tab = computed<Tab>({ get: () => ui.hudTab, set: (v) => (ui.hudTab = v) })
 
 // ---- Tank summary ----
 const percent = computed(() => Math.round((ui.volume / ui.capacity) * 100))
@@ -55,8 +56,6 @@ const updatedAgo = computed(() => {
 })
 
 // ---- Plan: sizing the roof and the tanks ----
-const MAX_TANKS = 10
-const ROOF_SIZES = [40, 60, 80, 100, 130, 160, 200, 250]
 // Typical non-drinking use of a family of four (toilets ~120 L/day, washing machine ~50 L/day, garden varies)
 const usePresets = [
   { name: 'Toilets', litres: 120 },
@@ -66,31 +65,6 @@ const usePresets = [
 ]
 const timeLapses = [1, 10, 60, 300, 1440]
 const roofLength = computed(() => ui.roofArea / (2 * eaveX))
-
-// Rainfall series the calculations run on: the real history of the location, or a typical climate before that
-const series = computed(() => {
-  void ui.climate.version
-  return ui.climate.loaded ? climateData.daily : syntheticSeries(ui.avgRainMmDay)
-})
-const target = computed(() => ui.targetReliability / 100)
-const current = computed(() => simulate(series.value, ui.roofArea, ui.dailyUseL, ui.capacity))
-const options = computed(() => roofOptions(series.value, ui.dailyUseL, target.value, ROOF_SIZES))
-const balanced = computed(() => balancedOption(options.value))
-const smallestRoof = computed(() => options.value.find((o) => o.tank !== null)?.area ?? null)
-
-// Common tank sizes: pick the smallest one that keeps the number of tanks reasonable (at most 4)
-const TANK_SIZES = [300, 500, 1000, 2000, 3000, 5000]
-const suggestTanks = (litres: number) => {
-  const size = TANK_SIZES.find((s) => Math.ceil(litres / s) <= 4) ?? TANK_SIZES[TANK_SIZES.length - 1]
-  return { size, count: Math.max(1, Math.min(MAX_TANKS, Math.ceil(litres / size))) }
-}
-const applyOption = (area: number, tank: number) => {
-  const { size, count } = suggestTanks(tank)
-  ui.roofAuto = false
-  ui.roofArea = area
-  ui.tankSize = size
-  ui.tanks = count
-}
 
 // Reliability against tank volume for the current roof (SVG chart)
 const curveMax = computed(() => {
@@ -313,6 +287,11 @@ const toggleApocalypse = () => {
       <div class="presets">
         <button v-for="p in presets" :key="p.name" :disabled="isLive || ui.apocalypse" @click="intensityPercent = p.value">{{ p.name }}</button>
       </div>
+      <label class="row">
+        <span>Wind</span>
+        <strong>{{ Math.round(ui.windScale * 100) }}%</strong>
+      </label>
+      <input v-model.number="ui.windScale" type="range" min="0" max="3" step="0.1" aria-label="Wind" />
     </section>
 
     <!-- World -->

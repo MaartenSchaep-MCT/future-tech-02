@@ -12,7 +12,7 @@ import { ui, world } from '../scene/rainState'
 // Apocalypse mode: the rain never stops, the water rises over the whole map and tsunami waves sweep across it.
 // Everything is done on the GPU in the vertex shader of ONE plane (no extra particles), so it stays cheap:
 // the water surface is a height function (small ripples + up to three travelling tsunami fronts).
-const FLOOD_MAX = 10 // metres; covers the house and the hills
+// The flood rises up to ui.floodLimit (10 m covers the house and the hills)
 const RISE_SPEED = 0.09 // metres per second
 const FALL_SPEED = 0.8
 const FIRST_WAVE = 6 // seconds after the start
@@ -69,6 +69,7 @@ const waterRef = shallowRef<Mesh | null>(null)
 const flashRef = shallowRef<AmbientLight | null>(null)
 
 let level = 0
+let handledWaves = 0
 let elapsedFlood = 0
 let uiTimer = 0
 let nextStrike = 3
@@ -78,9 +79,16 @@ const { onBeforeRender } = useLoop()
 onBeforeRender(({ delta }) => {
   const dt = Math.min(delta, 0.05)
 
+  // A tsunami was requested (for example by voice): jump to the start of the next wave
+  if (world.waveRequests !== handledWaves) {
+    handledWaves = world.waveRequests
+    if (ui.apocalypse) elapsedFlood = FIRST_WAVE + (Math.floor((elapsedFlood - FIRST_WAVE) / WAVE_INTERVAL) + 1) * WAVE_INTERVAL
+  }
+
   if (ui.apocalypse) {
     elapsedFlood += dt
-    level = Math.min(FLOOD_MAX, level + RISE_SPEED * dt)
+    // Rises up to the limit, and sinks back when the limit is lowered
+    level = level < ui.floodLimit ? Math.min(ui.floodLimit, level + RISE_SPEED * dt) : Math.max(ui.floodLimit, level - FALL_SPEED * dt)
   } else {
     elapsedFlood = 0
     level = Math.max(0, level - FALL_SPEED * dt)

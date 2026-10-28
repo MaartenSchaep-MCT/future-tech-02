@@ -4,6 +4,7 @@ import { ACESFilmicToneMapping } from 'three'
 import TheExperience from './components/TheExperience.vue'
 import RainHud from './components/RainHud.vue'
 import RainCharts from './components/RainCharts.vue'
+import VoiceControl from './components/VoiceControl.vue'
 import { skyColor, ui } from './scene/rainState'
 </script>
 
@@ -19,5 +20,6 @@ import { skyColor, ui } from './scene/rainState'
     <TheExperience />
   </TresCanvas>
   <RainHud />
+  <VoiceControl />
   <RainCharts v-if="ui.showCharts" />
 </template>

@@ -233,7 +233,7 @@ watch(flowerRef, (mesh) => {
 
 const { onBeforeRender } = useLoop()
 onBeforeRender(() => {
-  uWind.value = 0.1 + ui.intensity * 0.4
+  uWind.value = (0.1 + ui.intensity * 0.4) * ui.windScale
   uWet.value = ui.wetness
   uDay.value = sky.day
 })

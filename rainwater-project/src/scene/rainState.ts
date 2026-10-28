@@ -39,6 +39,7 @@ export const ui = reactive({
   overflowing: false,
   emptying: false,
   mode: 'manual' as 'manual' | 'live',
+  hudTab: 'plan' as 'plan' | 'weather' | 'world', // the open tab of the control panel (voice commands can switch it)
   live: {
     loading: false,
     error: '',
@@ -49,11 +50,13 @@ export const ui = reactive({
   },
   apocalypse: false, // flood mode: endless storm, rising water and tsunamis
   floodLevel: 0, // metres of flood water above the ground
+  floodLimit: 10, // the flood stops rising at this level (metres)
   timeOfDay: 14, // hours, 0..24
   autoTime: false,
   dayLengthMin: 2, // real minutes for a full 24 h when the clock runs
   usageRate: 0, // litres per second actually drawn (smoothed)
   usedTotal: 0,
+  windScale: 1, // wind strength multiplier (rain slant, grass sway)
   timeLapse: 10, // multiplies how fast the tank fills and is used compared to reality
   showCharts: false,
   wetness: 0, // 0 dry .. 1 soaked; builds up while it rains and slowly dries
@@ -76,6 +79,7 @@ export const world = {
     { x: 1, z: 0, s: 0, a: 0 },
     { x: 1, z: 0, s: 0, a: 0 },
   ], // tsunami fronts: direction, position along it, amplitude (a = 0: inactive)
+  waveRequests: 0, // bumped to send a tsunami right now
   flash: 0,
   hour: 14,
 }
